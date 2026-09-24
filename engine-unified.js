@@ -88,10 +88,19 @@ function regions(space,n,axis,reserve){
   if(count>16)return null;
   for(let k=0;k<count;k++){
   const r={...cell};if(alongX){r.width/=count;r.x+=k*r.width;}else{r.height/=count;r.y+=k*r.height;}
+  // Obstacle decomposition can leave very thin slivers that are valid free
+  // space for connector routing but cannot hold a complete heating loop. Such
+  // a sliver must not invalidate the whole room.
+  if(r.width<n.pitch-EPS||r.height<n.pitch-EPS)continue;
   const mx=Math.min(reserve,(r.width-n.pitch)/2),my=Math.min(reserve,(r.height-n.pitch)/2);
-  if(mx<0||my<0)return null;
+  if(mx<0||my<0)continue;
   r.x+=mx;r.y+=my;r.width-=2*mx;r.height-=2*my;
-  if(r.width<n.pitch-EPS||r.height<n.pitch-EPS)return null;
+  if(r.width<n.pitch-EPS||r.height<n.pitch-EPS)continue;
+  // Very small remnants around obstacle corners are better left as
+  // connector-only free space than promoted to a separate 1–3 m circuit.
+  // Six pitch-squares is below the useful area of an independent heating
+  // region but still leaves those cells available to `connector()`.
+  if(r.width*r.height<6*n.pitch*n.pitch)continue;
   out.push(r);
  }}return out;
 }

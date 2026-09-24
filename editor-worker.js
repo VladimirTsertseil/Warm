@@ -1,4 +1,4 @@
-importScripts('./engine-unified.js?v=261-unified','./editor-core.js?v=261-editor');
+importScripts('./engine-unified.js?v=2611-obstacle-hotfix','./editor-core.js?v=261-editor');
 self.onmessage=({data})=>{
  try{
   const {operation,input,plan,locks,range}=data;

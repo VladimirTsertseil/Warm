@@ -43,7 +43,7 @@ function failure(message='Допустимый вариант не найден.
  clear();renderPlan();setStatus(message,true);
 }
 runEngineWorkerV1=function(params){return new Promise((resolve,reject)=>{
- const worker=new Worker('./engine-worker-v120.js?v=261-unified');
+ const worker=new Worker('./engine-worker-v120.js?v=2611-obstacle-hotfix');
  const finish=(error,result)=>{clearTimeout(timer);worker.terminate();if(cancelWorker===cancel)cancelWorker=null;error?reject(error):resolve(result);};
  const cancel=()=>finish(new Error('planner-cancelled'));
  const timer=setTimeout(()=>finish(new Error('planner-timeout')),300000);
