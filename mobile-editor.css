@@ -48,9 +48,12 @@ body.mobile-editor-active .zoom-fab .round-btn{width:44px;height:44px}
  #editInspector:not(:has(.edit-fields))>.edit-row{margin:0}
  #editInspector:not(:has(.edit-fields))>p{grid-column:1/-1}
 }
-/* 2.8 direct-line + control-point editing */
+/* 2.9 direct-line + explicit bend-point editing */
 #editDock button[data-edit-tool="erase"][aria-pressed="true"]{background:#fee2e2;color:#b91c1c}
 #editDock button[data-edit-tool="draw"][aria-pressed="true"]{background:#ede9fe;color:#6d28d9}
 #editDock button[data-edit-tool="points"][aria-pressed="true"]{background:#fef3c7;color:#92400e}
 #planSvg .edit-line-draft{pointer-events:none;stroke-linecap:round}
 @media(max-width:430px){#editDock button{font-size:11px}#editDock button b{font-size:18px}}
+
+#planSvg .edit-bend-point{pointer-events:none}
+#planSvg .edit-bend-point.is-bad{filter:drop-shadow(0 0 2px rgba(185,28,28,.35))}

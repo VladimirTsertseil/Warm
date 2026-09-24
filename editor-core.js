@@ -1,4 +1,4 @@
-/* Pure editing operations. WarmEngine.validate is the only acceptance gate. */
+/* Warm 2.9 editing core. Manual geometry may be temporarily invalid; inspect() reports issues without blocking edits. */
 (function(root,factory){if(typeof module==='object'&&module.exports)module.exports=factory(require('./engine-unified.js'));else root.WarmEditorCore=factory(root.WarmEngine);})(globalThis,function(E){
 'use strict';
 const copy=v=>structuredClone(v),dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y),same=(a,b)=>dist(a,b)<1e-6;
@@ -94,6 +94,30 @@ function turnSelectionFromAnchor(plan,anchor,toward){
  return null;
 }
 
+function nearestVertex(plan,p,tolerance,includeEndpoints=true){
+ const hits=[];plan.circuits.forEach((c,ci)=>c.route.forEach((v,index)=>{if(!includeEndpoints&&(index===0||index===c.route.length-1))return;const distance=dist(p,v);if(distance<=tolerance)hits.push({circuit:ci,index,at:copy(v),distance,endpoint:index===0||index===c.route.length-1});}));
+ return hits.sort((a,b)=>a.distance-b.distance||a.circuit-b.circuit||a.index-b.index);
+}
+function insertVertex(plan,ci,seg,at,locks=[]){
+ const r=plan.circuits[ci]?.route;if(!r||seg<0||seg>=r.length-1||!at||![at.x,at.y].every(Number.isFinite))return{ok:false,message:'Коснитесь нужного участка трубы'};
+ const p=projection(at,r[seg],r[seg+1]);if(dist(p,r[seg])<1||dist(p,r[seg+1])<1)return{ok:false,message:'Точка слишком близко к существующей'};
+ const route=[...r.slice(0,seg+1),copy(p),...r.slice(seg+1)],next=updated(plan,ci,route);
+ if(!locksPreserved(next,locks))return{ok:false,message:'На этом участке есть закреплённая труба'};
+ return{ok:true,plan:next,index:seg+1,point:copy(p)};
+}
+function deleteVertex(plan,ci,index,locks=[]){
+ const r=plan.circuits[ci]?.route;if(!r||index<=0||index>=r.length-1)return{ok:false,message:'Начало и конец контура удалить нельзя'};
+ const route=[...r.slice(0,index),...r.slice(index+1)],next=updated(plan,ci,route);
+ if(!locksPreserved(next,locks))return{ok:false,message:'Рядом с этой точкой есть закреплённая труба'};
+ return{ok:true,plan:next,index:Math.max(0,index-1)};
+}
+function moveVertex(plan,ci,index,to,locks=[]){
+ const r=plan.circuits[ci]?.route;if(!r||index<=0||index>=r.length-1)return{ok:false,message:'Начало и конец контура двигаются вместе с коллектором'};
+ if(!to||![to.x,to.y].every(Number.isFinite))return{ok:false,message:'Некорректное положение точки'};
+ const route=copy(r);route[index]=copy(to);const next=updated(plan,ci,route);
+ if(!locksPreserved(next,locks))return{ok:false,message:'Рядом с этой точкой есть закреплённая труба'};
+ return{ok:true,plan:next,index,point:copy(to)};
+}
 function routeDistance(p,route){let best=Infinity;for(const [a,b] of E.segments(route))best=Math.min(best,dist(p,projection(p,a,b)));return best;}
 function nearestFreePoint(p,space){let best=null;for(const r of space.rects){const pad=Math.min(2,Math.max(0,Math.min(r.width,r.height)/4)),q={x:Math.max(r.x+pad,Math.min(r.x+r.width-pad,p.x)),y:Math.max(r.y+pad,Math.min(r.y+r.height-pad,p.y))},d=dist(p,q);if(!best||d<best.distance)best={p:q,distance:d};}return best?.p||copy(p);}
 function guidedReplace(input,plan,ci,start,end,guide=[],locks=[],options={}){
@@ -255,5 +279,5 @@ function resizeWall(sections,edge,length){
  if(result.some(r=>r.width<50||r.height<50))throw new Error('Этот размер делает часть комнаты слишком узкой');
  return result;
 }
-return{copy,dist,same,projection,edgeKey,locksPreserved,updated,nearest,prepareCut,prepareSpan,offsetSpan,offsetSpanClamped,moveSegment,moveSegmentNormal,moveSegmentNormalClamped,turnSelectionFromAnchor,replace,guidedReplace,inspect,bypass,reconnect,boundaries,resizeWall,labels};
+return{copy,dist,same,projection,edgeKey,locksPreserved,updated,nearest,nearestVertex,insertVertex,deleteVertex,moveVertex,prepareCut,prepareSpan,offsetSpan,offsetSpanClamped,moveSegment,moveSegmentNormal,moveSegmentNormalClamped,turnSelectionFromAnchor,replace,guidedReplace,inspect,bypass,reconnect,boundaries,resizeWall,labels};
 });

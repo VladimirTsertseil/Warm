@@ -11,8 +11,8 @@ const resume=document.createElement('button');resume.className='secondary-btn ed
 const btn=(id,text,extra='')=>`<button type="button" id="${id}" ${extra}>${text}</button>`;
 const field=(id,label,value,extra='')=>`<label>${label}<input id="${id}" type="number" inputmode="decimal" value="${Math.round(value*100)/100}" ${extra}></label>`;
 function params(){return WarmV260.input();}
-function pack(){return{plan:copy(plan),baseline:copy(baseline),locks:copy(locks),view:copy(view),scratch:{editorVersion:'2.8',tool:tool==='more'?returnTool:tool,range:copy(range),cutPick:copy(cutPick),gap:copy(gap),drawPoints:copy(drawPoints)}};}
-function restoreScratch(s){tool=s?.tool||'select';range=copy(s?.range||null);cutPick=copy(s?.cutPick||null);gap=copy(s?.gap||null);drawPoints=copy(s?.drawPoints||[]);preview=null;pointPick=null;pointSpan=null;liveLine=null;if(s?.editorVersion!=='2.8'&&gap){const r=plan?.circuits?.[gap.circuit]?.route;drawPoints=r?[copy(r[gap.start])]:[];}}
+function pack(){return{plan:copy(plan),baseline:copy(baseline),locks:copy(locks),view:copy(view),scratch:{editorVersion:'2.9',tool:tool==='more'?returnTool:tool,range:copy(range),cutPick:copy(cutPick),gap:copy(gap),drawPoints:copy(drawPoints)}};}
+function restoreScratch(s){tool=s?.tool||'select';range=copy(s?.range||null);cutPick=copy(s?.cutPick||null);gap=copy(s?.gap||null);drawPoints=copy(s?.drawPoints||[]);preview=null;pointPick=null;pointSpan=null;liveLine=null;if(!['2.8','2.9'].includes(s?.editorVersion)&&gap){const r=plan?.circuits?.[gap.circuit]?.route;drawPoints=r?[copy(r[gap.start])]:[];}}
 function snapshot(){return{draft:pack(),geometry:{sections:copy(state.sections),obstacles:copy(state.obstacles||[]),supply:copy(state.supply),returnPoint:copy(state.returnPoint),shapeType:state.shapeType,shapeParams:copy(state.shapeParams),shapeAxes:copy(state.shapeAxes),roomAdded:[...state.roomAdded],roomRemoved:[...state.roomRemoved],excluded:[...state.excluded]}};}
 function restore(s){cancelRouting();cutBefore=null;plan=copy(s.draft.plan);baseline=copy(s.draft.baseline);locks=copy(s.draft.locks);const g=copy(s.geometry);for(const k of ['roomAdded','roomRemoved','excluded'])g[k]=new Set(g[k]);Object.assign(state,g);syncCollectors();recomputeGeometry();syncInputs();syncShapeUiV5();selection=null;restoreScratch(s.draft.scratch);check();render();scheduleSave();}
 function remember(before=snapshot()){undo.push(before);if(undo.length>60)undo.shift();redo=[];}
@@ -30,7 +30,7 @@ function syncCollectors(){state.collectorCountV23=1;state.collectorsV23=state.su
 function enter(){
  if(active)return;if(state.engineBusyV1)resetRoute();closeSheetV5();
  const saved=state.editorDraft;
- plan=copy(saved?.plan||state.enginePlanV1||{version:'2.8.0',planner:'unified-bcd',kind:'manual',circuits:[]});
+ plan=copy(saved?.plan||state.enginePlanV1||{version:'2.9.0',planner:'unified-bcd',kind:'manual',circuits:[]});
  if(!saved&&state.manualV2?.loaded&&state.manualV2.dirty&&state.manualV2.circuits?.length){const old=state.manualV2;plan.circuits=old.circuits.map(c=>({...copy(plan.circuits.find(x=>x.id===c.id)||{}),...copy(c),bendRadiusMm:requestedBendRadiusV10()}));}
  if(!plan.circuits.length&&state.route?.length)plan.circuits=[{id:1,route:copy(state.route),supply:copy(state.supply),returnPoint:copy(state.returnPoint),bendRadiusMm:requestedBendRadiusV10()}];
  baseline=copy(saved?.baseline||plan);locks=copy(saved?.locks||[]);selection=null;hits=[];range=null;cutPick=null;gap=null;cutBefore=null;preview=null;drawPoints=[];pointPick=null;pointSpan=null;liveLine=null;undo=[];redo=[];tool='select';expanded=false;compare=false;
@@ -38,7 +38,7 @@ function enter(){
  $('editActions').hidden=false;$('editDock').hidden=false;panel.hidden=false;view=saved?.view?copy(saved.view):null;
  restoreScratch(saved?.scratch);check();renderPanel();if(!view)fit();else render();scheduleSave();
  $('schemeTitle').textContent=state.name||'Правка плана';$('gridInfo').textContent='Изменения сохраняются';
- modeHint.textContent='Правка 2.8: рисуйте прямые отрезки, ставьте точки и двигайте участки. Два пальца — масштаб.';modeHint.classList.add('visible');
+ modeHint.textContent='Правка 2.9: двигайте прямые или включите «Изломы», чтобы править каждый излом отдельно. Два пальца — масштаб.';modeHint.classList.add('visible');
 }
 function deactivate(){cancelRouting();active=false;gesture=null;pointers.clear();magnifier.hidden=true;state.manualV2=blankManualStateV2A();state.mode='inspect';document.body.classList.remove('mobile-editor-active','manual-v2-active');$('editActions').hidden=true;$('editDock').hidden=true;panel.hidden=true;planSvg.classList.remove('manual-v2-mode');planSvg.style.removeProperty('width');planSvg.style.removeProperty('height');}
 function leave(draft=false){
@@ -95,8 +95,11 @@ function renderCanvas(){
  if(drawPoints.length&&!preview)html+=`<path class="edit-pipe edit-line-draft" d="${pathD(drawPoints)}" stroke="#7c3aed" stroke-width="4" opacity=".9"/>`;
  if(liveLine)html+=line(liveLine.a,liveLine.b,liveLine.ok===false?'#b91c1c':'#7c3aed',4,'stroke-dasharray="8 6" opacity=".9"');
  if(preview?.path)html+=`<path class="edit-pipe" d="${pathD(preview.path)}" stroke="${preview.validation.ok?'#059669':'#b91c1c'}" stroke-width="5" stroke-dasharray="8 6"/>`;
- if(pointPick&&!pointSpan)html+=dot(pointPick.at,'1','#f59e0b');
- if(pointSpan){html+=line(pointSpan.a,pointSpan.b,'#7c3aed',7,'opacity=".75"');html+=dot(pointSpan.a,'1','#7c3aed')+dot(pointSpan.b,'2','#7c3aed');}
+ if(tool==='points'){
+  const badByCircuit=new Map();for(const issue of issues){if(!badByCircuit.has(issue.circuit))badByCircuit.set(issue.circuit,new Set());for(const seg of issue.segments||[]){badByCircuit.get(issue.circuit).add(seg);badByCircuit.get(issue.circuit).add(seg+1);}}
+  current.circuits.forEach((c,ci)=>c.route.forEach((p,i)=>{const endpoint=i===0||i===c.route.length-1,selected=pointPick?.kind==='vertex'&&pointPick.circuit===ci&&pointPick.index===i,bad=badByCircuit.get(ci)?.has(i);const rr=(selected?10:endpoint?6:8)/s,fill=selected?'#2563eb':endpoint?'#64748b':'#f8fafc',stroke=bad?'#b91c1c':selected?'#1d4ed8':'#334155',sw=(bad||selected)?3:2;html+=`<circle class="edit-bend-point ${bad?'is-bad':''}" cx="${p.x}" cy="${p.y}" r="${rr}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}" vector-effect="non-scaling-stroke"/>`;if(bad)html+=`<circle cx="${p.x}" cy="${p.y}" r="${rr+5/s}" fill="none" stroke="#ef4444" stroke-width="2" opacity=".45" vector-effect="non-scaling-stroke"/>`; }));
+  if(pointPick?.kind==='insert'){const p=pointPick.at,r=10/s;html+=`<circle cx="${p.x}" cy="${p.y}" r="${r}" fill="#f59e0b" stroke="white" stroke-width="2" vector-effect="non-scaling-stroke"/><text x="${p.x}" y="${p.y+4/s}" text-anchor="middle" fill="white" font-size="${13/s}" font-family="system-ui">＋</text>`;}
+ }
  if(preview?.kind==='reconnect')preview.plan.circuits.forEach((c,ci)=>{const old=new Set(E.segments(plan.circuits[ci].route).map(e=>C.edgeKey(...e)));for(const edge of E.segments(c.route))if(!old.has(C.edgeKey(...edge)))html+=line(...edge,'#059669',5,'stroke-dasharray="8 6"');});
  const issue=(preview?.validation?.issues||issues)[0],badRoute=current.circuits[issue?.circuit]?.route,segment=issue?.segments[0];
  if(badRoute?.[segment+1]&&!gesture){const a=badRoute[segment],b=badRoute[segment+1],p={x:(a.x+b.x)/2,y:(a.y+b.y)/2};html+=`<circle cx="${p.x}" cy="${p.y}" r="${7/s}" fill="#b91c1c"/><text x="${p.x}" y="${p.y-13/s}" text-anchor="middle" font-family="system-ui" font-size="${12/s}" fill="#991b1b" stroke="white" stroke-width="${4/s}" paint-order="stroke">${esc(issue.message)}</text>`;}
@@ -118,7 +121,7 @@ function renderPanel(){
  let html='';
  if(tool==='more'){
   html=`<div class="edit-context-head"><strong>Ещё</strong>${btn('editCloseMore','×','aria-label="Закрыть меню"')}</div><div class="edit-row">${btn('editLock',isLocked()?'Открепить':'Закрепить',selection?.type==='pipe'?'':'disabled')}${btn('editCompare',compare?'Скрыть сравнение':'Сравнить')}${btn('editFit','Весь план')}</div><div class="edit-row">${btn('editAutoBypass','Автообход')}${btn('editSaveDraft','Сохранить черновик')}${btn('editCheck','Проверить')}</div>`;
- }else if(preview){html=`<strong>${preview.kind==='reconnect'?'Подключение коллектора':'Линии А → Б готовы'}</strong><p class="${preview.validation.ok?'':'edit-error'}">${preview.validation.ok?'Маршрут собран из заданных вами прямых. Повороты построены с минимальным допустимым радиусом.':esc(preview.validation.issues[0]?.message||'Требуется правка')}</p><div class="edit-row">${btn('editApply','Применить',`class="edit-primary" ${preview.validation.ok?'':'disabled'}`)}${gap?btn('editResetDraw','Начать заново'):''}${btn('editCancelRange','Отмена')}</div>`;
+ }else if(preview){const bad=!preview.validation.ok;html=`<strong>${preview.kind==='reconnect'?'Подключение коллектора':'Линии А → Б готовы'}</strong><p class="${bad?'edit-error':''}">${bad?'Можно применить и поправить позже: проблемные фрагменты останутся подсвечены. '+esc(preview.validation.issues[0]?.message||'Есть замечания к геометрии.'):'Маршрут собран из заданных вами прямых. Повороты отображаются с заданным минимальным радиусом.'}</p><div class="edit-row">${btn('editApply',bad?'Применить и править':'Применить','class="edit-primary"')}${gap?btn('editResetDraw','Начать заново'):''}${btn('editCancelRange','Отмена')}</div>`;
  }else if(tool==='erase'){
   html=`<strong>${cutPick?'Теперь коснитесь конца Б':'Ластик: коснитесь начала А'}</strong><p>${cutPick?'Выберите вторую точку на этом же контуре. Участок между А и Б будет заменён вручную.':'Можно выбрать точку прямо посередине прямого участка — не только на повороте.'}</p><div class="edit-row">${btn('editCancelRange','Отмена')}</div>`;
  }else if(tool==='draw'&&gap){
@@ -128,9 +131,11 @@ function renderPanel(){
   if(!plan.circuits.length)html=`<strong>Новый контур линиями</strong><p>${state.supply?'Зажмите активный конец трубы, протяните прямую и отпустите.':'Сначала укажите коллектор через основной экран.'}</p><div class="edit-row">${btn('editFinishNew','Соединить с обраткой',!drawPoints.length?'disabled':'')}${btn('editCancelRange','Отмена')}</div>`;
   else html=`<strong>Линия</strong><p>Чтобы перерисовать часть существующего контура, сначала вырежьте её ластиком.</p><div class="edit-row">${btn('editUseEraser','Открыть ластик','class="edit-primary"')}${btn('editCancelRange','Отмена')}</div>`;
  }else if(tool==='points'){
-  if(pointSpan)html=`<strong>Выделен отрезок между точками 1–2</strong><p>Потяните выделенную часть перпендикулярно в сторону. Warm сам ограничит движение стенами, препятствиями и минимальным радиусом.</p><div class="edit-row">${btn('editClearPoints','Сбросить точки')}${btn('editCancelRange','Готово')}</div>`;
-  else if(pointPick)html=`<strong>Точка 1 поставлена</strong><p>Коснитесь второй точки на этой же прямой — получите участок для смещения. Или зажмите трубу слева/справа от точки и потяните: изменится ближайший поворот с выбранной стороны.</p><div class="edit-row">${btn('editClearPoints','Убрать точку')}${btn('editCancelRange','Готово')}</div>`;
-  else html=`<strong>Точки поворота</strong><p>Одна точка помогает сдвинуть ближайший поворот. Две точки на одной прямой выделяют участок, который можно оттянуть перпендикулярно.</p><div class="edit-row">${btn('editCancelRange','Готово')}</div>`;
+  if(pointPick?.kind==='vertex'){
+   const c=plan.circuits[pointPick.circuit],end=pointPick.index===0||pointPick.index===c.route.length-1;
+   html=`<strong>${end?'Конец контура':'Точка излома'}</strong><p>${end?'Эта точка связана с коллектором. Остальные точки можно свободно перетаскивать.':'Тяните эту точку пальцем в любое место. Warm не блокирует движение — нарушения подсветятся на схеме.'}</p><div class="edit-row">${btn('editDeletePoint','Удалить точку',end?'disabled':'')}${btn('editClearPoints','Снять выбор')}</div>`;
+  }else if(pointPick?.kind==='insert')html=`<strong>Добавить точку излома здесь?</strong><p>Новая точка сначала лежит на текущей прямой. После добавления её можно сразу перетянуть в нужное место.</p><div class="edit-row">${btn('editAddPoint','＋ Добавить точку','class="edit-primary"')}${btn('editClearPoints','Отмена')}</div>`;
+  else html=`<strong>Точки излома</strong><p>Все точки контура показаны на схеме. Тяните любую внутреннюю точку напрямую. Коснитесь прямой между точками, чтобы добавить новую.</p><div class="edit-row">${btn('editClearPoints','Снять выбор')}</div>`;
  }else if(tool==='rebuild'){
   const instruction=!range?'Коснитесь начала участка А':range.end==null?'Коснитесь конца Б на том же контуре':'Выбран участок А → Б';
   html=`<strong>${instruction}</strong><p>Точки привязываются к ближайшему повороту трубы.</p><div class="edit-row">${range?.end!=null?btn('editBypass','Обойти препятствие','class="edit-primary"'):''}${btn('editCancelRange','Отмена')}</div>`;
@@ -171,7 +176,7 @@ function setPreview(result,path,kind='local'){if(result.cancelled)return;if(!res
 function cancelRouting(){routing?.cancel();routing=null;}
 function search(operation,extra={}){
  cancelRouting();const data={operation,input:params(),plan:copy(plan),locks:copy(locks),range:copy(range),...copy(extra)},signature=JSON.stringify([data.input,data.plan,data.locks,data.range,data.guide||null]);
- return new Promise(resolve=>{const worker=new Worker('./editor-worker.js?v=280-cad1');let timer;const finish=result=>{clearTimeout(timer);worker.terminate();routing=null;resolve(active&&signature===JSON.stringify([params(),plan,locks,range,data.guide||null])?result:{cancelled:true});};routing={cancel:()=>finish({cancelled:true})};timer=setTimeout(()=>finish({ok:false,message:'Поиск занял слишком много времени. Проведите линию проще.'}),15000);worker.onmessage=e=>finish(e.data);worker.onerror=()=>finish({ok:false,message:'Не удалось построить участок.'});worker.postMessage(data);});
+ return new Promise(resolve=>{const worker=new Worker('./editor-worker.js?v=290-points1');let timer;const finish=result=>{clearTimeout(timer);worker.terminate();routing=null;resolve(active&&signature===JSON.stringify([params(),plan,locks,range,data.guide||null])?result:{cancelled:true});};routing={cancel:()=>finish({cancelled:true})};timer=setTimeout(()=>finish({ok:false,message:'Поиск занял слишком много времени. Проведите линию проще.'}),15000);worker.onmessage=e=>finish(e.data);worker.onerror=()=>finish({ok:false,message:'Не удалось построить участок.'});worker.postMessage(data);});
 }
 function appendDraw(p,snap=true){const last=drawPoints.at(-1);p=snap?{x:Math.round(p.x/10)*10,y:Math.round(p.y/10)*10}:copy(p);if(!last){drawPoints=[p];return;}if(Math.abs(p.x-last.x)>Math.abs(p.y-last.y))drawPoints.push({x:p.x,y:last.y},p);else drawPoints.push({x:last.x,y:p.y},p);drawPoints=E.clean(drawPoints);}
 function lineContext(){
@@ -198,35 +203,23 @@ function safeEndpoint(a,b,ctx){
  if(segmentClear(a,b,ctx))return b;let lo=0,hi=1;for(let i=0;i<18;i++){const t=(lo+hi)/2,p={x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t};if(segmentClear(a,p,ctx))lo=t;else hi=t;}const t=Math.max(0,lo-.002),raw={x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t},q={x:Math.round(raw.x/10)*10,y:Math.round(raw.y/10)*10};return segmentClear(a,q,ctx)?q:raw;
 }
 function lineEndpoint(raw,ctx,start){
- if(ctx.b&&C.dist(raw,ctx.b)*view.scale<=48&&segmentClear(start,ctx.b,ctx))return{p:copy(ctx.b),snapped:true};
- const q=clampFree(raw,ctx,10),safe=safeEndpoint(start,q,ctx);return{p:safe,snapped:false};
+ if(ctx.b&&C.dist(raw,ctx.b)*view.scale<=48)return{p:copy(ctx.b),snapped:true};
+ return{p:{x:Math.round(raw.x/10)*10,y:Math.round(raw.y/10)*10},snapped:false};
 }
-function partialLineOK(path,ctx,closing=false){
- const check=[...(ctx.pre?[ctx.pre]:[]),...path,...(closing&&ctx.post?[ctx.post]:[])];
- if(!E.bendsOK(E.clean(check),ctx.n.minBendRadiusMm))return{ok:false,message:`Для поворота нужно больше места: Rmin ${Math.ceil(ctx.n.minBendRadiusMm)} мм`};
- const ss=E.segments(path);for(let i=0;i<ss.length;i++)for(let j=0;j<i-1;j++)if(E.intersect(...ss[i],...ss[j]))return{ok:false,message:'Новая линия пересекает уже нарисованный участок'};
- return{ok:true};
-}
+function partialLineOK(){return{ok:true};}
 function finishLineSegment(g,tip){
  const start=g.startPoint,hit=lineEndpoint(tip,g.drawCtx,start),q=hit.p;if(C.dist(start,q)<5){setStatus('Протяните линию дальше.');return false;}
- const path=E.clean([...drawPoints,q]),test=partialLineOK(path,g.drawCtx,hit.snapped);if(!test.ok){setStatus(test.message,true);return false;}
- if(hit.snapped&&gap){const result=C.replace(plan,gap.circuit,gap.start,gap.end,path,locks);if(!result.ok){setStatus(result.message,true);return false;}const inspected=C.inspect(params(),result.plan);if(!inspected.ok){setStatus(inspected.issues[0]?.message||'Этот последний отрезок не помещается.',true);return false;}remember(g.before);drawPoints=path;preview={plan:result.plan,path:copy(path),kind:'line',validation:inspected};liveLine=null;render();scheduleSave();setStatus('Соединено с Б. Проверьте и нажмите «Применить».');return true;}
+ const path=[...drawPoints,copy(q)];
+ if(hit.snapped&&gap){const result=C.replace(plan,gap.circuit,gap.start,gap.end,path,locks);if(!result.ok){setStatus(result.message,true);return false;}const inspected=C.inspect(params(),result.plan);remember(g.before);drawPoints=path;preview={plan:result.plan,path:copy(path),kind:'line',validation:inspected};liveLine=null;render();scheduleSave();setStatus(inspected.ok?'Соединено с Б. Нажмите «Применить».':`Соединено с Б. Есть ${inspected.issues.length} замечаний — примените и подправьте подсвеченные места.`);return true;}
  remember(g.before);drawPoints=path;liveLine=null;render();scheduleSave();setStatus('Отрезок добавлен. Тяните следующий от его конца.');return true;
 }
+function pointAt(p,includeEndpoints=true){return C.nearestVertex(plan,p,24/view.scale,includeEndpoints)[0]||null;}
 function pointTap(p){
- const found=C.nearest(plan,p,28/view.scale)[0];if(!found){pointPick=null;pointSpan=null;setStatus('Коснитесь прямого участка трубы.');render();return;}
- if(!pointPick){pointPick={circuit:found.circuit,seg:found.seg,at:copy(found.at)};pointSpan=null;selection=null;render();setStatus('Точка 1. Теперь поставьте точку 2 на этой же прямой или потяните вдоль трубы в сторону нужного поворота.');return;}
- if(found.circuit!==pointPick.circuit||found.seg!==pointPick.seg){setStatus('Для смещения участка поставьте вторую точку на той же прямой.',true);return;}
- const result=C.prepareSpan(params(),plan,pointPick.circuit,pointPick,found,locks);if(!result.ok){setStatus(result.message,true);return;}
- pointSpan={circuit:result.circuit,start:result.start,end:result.end,a:copy(result.a),b:copy(result.b),basePlan:copy(result.plan)};pointPick=null;selection=null;render();setStatus('Участок 1–2 выбран. Потяните его перпендикулярно в сторону.');
+ const vertex=pointAt(p,true);if(vertex){pointPick={kind:'vertex',circuit:vertex.circuit,index:vertex.index,at:copy(vertex.at),endpoint:vertex.endpoint};selection=null;render();setStatus(vertex.endpoint?'Конец контура связан с коллектором.':'Точка выбрана. Потяните её пальцем или удалите кнопкой ниже.');return;}
+ const found=C.nearest(plan,p,26/view.scale)[0];if(found){pointPick={kind:'insert',circuit:found.circuit,seg:found.seg,at:copy(found.at)};selection=null;render();setStatus('Место выбрано. Нажмите «Добавить точку».');return;}
+ pointPick=null;selection=null;setStatus('Коснитесь точки излома или участка трубы.');render();
 }
-function spanHandleAt(p){if(!pointSpan)return false;const at=C.projection(p,pointSpan.a,pointSpan.b);return C.dist(p,at)*view.scale<=30;}
-function eraseTap(p){
- const found=C.nearest(plan,p,28/view.scale).find(h=>!cutPick||h.circuit===cutPick.circuit);if(!found){setStatus(cutPick?'Коснитесь этой же трубы.':'Коснитесь трубы в месте начала выреза.');return;}
- if(!cutPick){cutBefore=snapshot();cutPick={circuit:found.circuit,seg:found.seg,at:copy(found.at)};selection=null;render();scheduleSave();return;}
- const before=cutBefore||snapshot(),result=C.prepareCut(plan,cutPick.circuit,cutPick,found,locks);if(!result.ok){setStatus(result.message,true);return;}
- plan=result.plan;range={circuit:result.circuit,start:result.start,end:result.end};gap=copy(range);cutPick=null;cutBefore=null;drawPoints=[copy(result.a)];preview=null;tool='draw';selection=null;remember(before);check();render();scheduleSave();setStatus('Участок вырезан. Рисуйте новый путь прямыми отрезками от А к Б.');
-}
+function snapEditPoint(p){return{x:Math.round(p.x/10)*10,y:Math.round(p.y/10)*10};}
 function rangeTap(p){
  if(!plan.circuits.length){if(tool==='draw'&&drawPoints.length){remember();appendDraw(p);renderCanvas();renderPanel();scheduleSave();}return;}
  if(range?.end!=null){if(tool==='draw'){remember();appendDraw(p);render();scheduleSave();}return;}
@@ -275,8 +268,7 @@ function down(e){
   cancelRouting();const start=drawPoints.at(-1);if(!start||C.dist(p,start)*view.scale>38){gesture={kind:'drawBlocked',pointerId:e.pointerId,start:{clientX:e.clientX,clientY:e.clientY},view:copy(view),moved:false};setStatus('Начните новый отрезок с конца фиолетовой линии.');return;}
   const ctx=lineContext();gesture={kind:'lineDraw',pointerId:e.pointerId,start:{clientX:e.clientX,clientY:e.clientY},world:p,startPoint:copy(start),view:copy(view),before:snapshot(),moved:false,drawCtx:ctx};liveLine={a:copy(start),b:copy(start),ok:true};return;
  }
- if(tool==='points'&&pointSpan&&spanHandleAt(p)){gesture={kind:'spanOffset',pointerId:e.pointerId,start:{clientX:e.clientX,clientY:e.clientY},world:p,view:copy(view),before:snapshot(),moved:false,span:copy(pointSpan),basePlan:copy(pointSpan.basePlan),lastDelta:0};return;}
- if(tool==='points'&&pointPick){const found=C.nearest(plan,p,30/view.scale).find(h=>h.circuit===pointPick.circuit&&h.seg===pointPick.seg);if(found){gesture={kind:'turnPick',pointerId:e.pointerId,start:{clientX:e.clientX,clientY:e.clientY},world:p,view:copy(view),before:snapshot(),moved:false,anchor:copy(pointPick),basePlan:copy(plan),target:null,lastDelta:0};return;}}
+ if(tool==='points'){const vertex=pointAt(p,true);if(vertex){pointPick={kind:'vertex',circuit:vertex.circuit,index:vertex.index,at:copy(vertex.at),endpoint:vertex.endpoint};selection=null;if(vertex.endpoint){gesture={kind:'pointTapOnly',pointerId:e.pointerId,start:{clientX:e.clientX,clientY:e.clientY},world:p,view:copy(view),moved:false};return;}gesture={kind:'vertexDrag',pointerId:e.pointerId,start:{clientX:e.clientX,clientY:e.clientY},world:p,view:copy(view),before:snapshot(),basePlan:copy(plan),circuit:vertex.circuit,index:vertex.index,moved:false};return;}}
  const handle=handleAt(p);gesture={kind:handle||'pan',pointerId:e.pointerId,start:{clientX:e.clientX,clientY:e.clientY},world:p,view:copy(view),before:handle?snapshot():null,moved:false};
 }
 function showMagnifier(e,p){const r=workspace.getBoundingClientRect(),size=workspace.clientHeight<220?112:142;const left=Math.max(4,Math.min(r.width-size-4,e.clientX-r.left-size/2)),top=Math.max(4,e.clientY-r.top-size-36);magnifier.style.left=left+'px';magnifier.style.top=top+'px';magnifier.hidden=false;const side=size/(view.scale*2.5);magnifier.innerHTML=`<svg viewBox="${p.x-side/2} ${p.y-side/2} ${side} ${side}" xmlns="http://www.w3.org/2000/svg">${planSvg.innerHTML}</svg>`;}
@@ -289,15 +281,11 @@ function motion(e){
  if(gesture.kind==='drawBlocked')return;
  if(gesture.kind==='pan'){view.x=gesture.view.x-dx/view.scale;view.y=gesture.view.y-dy/view.scale;renderCanvas();return;}
  if(gesture.kind==='lineDraw'){const hit=lineEndpoint(point(e),gesture.drawCtx,gesture.startPoint);liveLine={a:copy(gesture.startPoint),b:copy(hit.p),ok:true,snapped:hit.snapped};renderCanvas();showMagnifier(e,hit.p);return;}
- if(gesture.kind==='spanOffset'){
-  const a=gesture.span.a,b=gesture.span.b,len=C.dist(a,b),nx=-(b.y-a.y)/len,ny=(b.x-a.x)/len,w=point(e),delta=Math.round(((w.x-gesture.world.x)*nx+(w.y-gesture.world.y)*ny)/10)*10,result=C.offsetSpanClamped(params(),gesture.basePlan,gesture.span,delta,locks);
-  if(result.ok){plan=result.plan;gesture.lastDelta=result.delta||0;renderCanvas();showMagnifier(e,w);}return;
+ if(gesture.kind==='vertexDrag'){
+  const w=snapEditPoint(point(e)),result=C.moveVertex(gesture.basePlan,gesture.circuit,gesture.index,w,locks);
+  if(result.ok){plan=result.plan;pointPick={kind:'vertex',circuit:gesture.circuit,index:gesture.index,at:copy(w),endpoint:false};renderCanvas();showMagnifier(e,w);}return;
  }
- if(gesture.kind==='turnPick'){
-  const w=point(e);if(!gesture.target){gesture.target=C.turnSelectionFromAnchor(gesture.basePlan,gesture.anchor,w);if(!gesture.target)return;selection={type:'pipe',...gesture.target};}
-  const rr=gesture.basePlan.circuits[gesture.target.circuit].route,a=rr[gesture.target.seg],b=rr[gesture.target.seg+1],len=C.dist(a,b),nx=-(b.y-a.y)/len,ny=(b.x-a.x)/len,delta=Math.round(((w.x-gesture.world.x)*nx+(w.y-gesture.world.y)*ny)/10)*10,result=C.moveSegmentNormalClamped(params(),gesture.basePlan,gesture.target,delta,locks);
-  if(result.ok){plan=result.plan;gesture.lastDelta=result.delta||0;renderCanvas();showMagnifier(e,w);}return;
- }
+ if(gesture.kind==='pointTapOnly')return;
  if(gesture.kind==='pipe'){
   const r=gesture.before.draft.plan.circuits[selection.circuit].route,a=r[selection.seg],b=r[selection.seg+1],h=Math.abs(a.y-b.y)<1e-6,v=Math.abs(a.x-b.x)<1e-6,w=point(e),len=C.dist(a,b),nx=-(b.y-a.y)/len,ny=(b.x-a.x)/len,raw=h?dy/view.scale:v?dx/view.scale:(w.x-gesture.world.x)*nx+(w.y-gesture.world.y)*ny,delta=Math.round(raw/10)*10,result=C.moveSegment(gesture.before.draft.plan,selection,delta,locks);
   if(result.ok){plan=result.plan;renderCanvas();showMagnifier(e,w);}
@@ -310,8 +298,8 @@ function up(e){
  if(e.type==='pointercancel'){if(g.before){plan=copy(g.before.draft.plan);state.supply=copy(g.before.geometry.supply);state.returnPoint=copy(g.before.geometry.returnPoint);syncCollectors();if(g.kind==='lineDraw')restoreScratch(g.before.draft.scratch);check();render();}liveLine=null;return;}
  if(g.kind==='drawBlocked')return;
  if(g.kind==='lineDraw'){liveLine=null;if(!g.moved){setStatus('Зажмите конец линии и протяните прямой отрезок.');render();return;}finishLineSegment(g,point(e));return;}
- if(g.kind==='spanOffset'){if(!g.moved||!g.lastDelta){plan=copy(g.before.draft.plan);render();return;}remember(g.before);check();pointPick=null;pointSpan=null;selection=null;render();scheduleSave();setStatus('Участок смещён. Радиусы и границы соблюдены.');return;}
- if(g.kind==='turnPick'){if(!g.moved){pointTap(point(e));return;}if(!g.target||!g.lastDelta){plan=copy(g.before.draft.plan);render();setStatus('В этой стороне нет доступного поворота для перемещения.');return;}remember(g.before);check();pointPick=null;pointSpan=null;selection={type:'pipe',...g.target};render();scheduleSave();setStatus('Положение ближайшего поворота изменено.');return;}
+ if(g.kind==='pointTapOnly'){pointTap(point(e));return;}
+ if(g.kind==='vertexDrag'){if(!g.moved){pointTap(point(e));return;}remember(g.before);check();selection=null;render();scheduleSave();setStatus(validation.ok?'Точка перемещена. Схема проходит проверку.':`Точка перемещена. Проблемные участки подсвечены: ${issues.length}.`);return;}
  if(!g.moved){tap(point(e));return;}
  if(g.before){if(JSON.stringify(g.before.draft.plan)!==JSON.stringify(plan)||JSON.stringify(g.before.geometry.supply)!==JSON.stringify(state.supply)){remember(g.before);check();scheduleSave();}render();}else scheduleSave();
 }
@@ -333,6 +321,8 @@ panel.addEventListener('click',async e=>{
  if(id==='editCheck'){check();render();setStatus(validation.ok?'Схема прошла проверку':issues[0]?.message,true&&!validation.ok);}
  if(id==='editCancelRange')cancelRange();
  if(id==='editClearPoints'){pointPick=null;pointSpan=null;selection=null;render();scheduleSave();}
+ if(id==='editAddPoint'&&pointPick?.kind==='insert'){const before=snapshot(),result=C.insertVertex(plan,pointPick.circuit,pointPick.seg,pointPick.at,locks);if(!result.ok){setStatus(result.message,true);return;}remember(before);plan=result.plan;pointPick={kind:'vertex',circuit:pointPick.circuit,index:result.index,at:copy(result.point),endpoint:false};check();render();scheduleSave();setStatus('Точка добавлена. Теперь её можно перетянуть.');}
+ if(id==='editDeletePoint'&&pointPick?.kind==='vertex'){const before=snapshot(),ci=pointPick.circuit,index=pointPick.index,result=C.deleteVertex(plan,ci,index,locks);if(!result.ok){setStatus(result.message,true);return;}remember(before);plan=result.plan;pointPick=null;selection=null;check();render();scheduleSave();setStatus(validation.ok?'Точка удалена. Соседние точки соединены.':`Точка удалена. Соседние точки соединены; проблемные места подсвечены (${issues.length}).`);}
  if(id==='editResetDraw'&&gap){remember();const r=plan.circuits[gap.circuit]?.route;drawPoints=r?[copy(r[gap.start])]:[];preview=null;liveLine=null;render();scheduleSave();}
  if(id==='editUndoLine'&&gap&&drawPoints.length>1){remember();drawPoints=drawPoints.slice(0,-1);preview=null;liveLine=null;render();scheduleSave();}
  if(id==='editBypass'&&range?.end!=null){e.target.disabled=true;e.target.textContent='Ищу обход…';const result=await search('bypass');setPreview(result,result.path);if(!preview)renderPanel();}
