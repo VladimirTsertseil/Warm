@@ -29,7 +29,7 @@ body.mobile-editor-active .zoom-fab .round-btn{width:44px;height:44px}
 .edit-fields input{width:100%;min-width:0;min-height:44px;font-size:16px;border:1px solid #cbd5e1;border-radius:10px;padding:8px;color:#0f172a;background:#fff}
 .edit-fields .edit-full{grid-column:1/-1}
 .edit-error{color:#b91c1c!important}
-#editDock{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;background:#f8fafc;border-top:1px solid #dce3eb;padding:5px 7px calc(5px + env(safe-area-inset-bottom));flex:none}
+#editDock{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;background:#f8fafc;border-top:1px solid #dce3eb;padding:5px 7px calc(5px + env(safe-area-inset-bottom));flex:none}
 #editDock button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:0;background:transparent;font-size:12px;padding:4px 2px;min-height:56px}
 #editDock button b{font-size:20px;line-height:1.1}
 #editDock button[aria-pressed=true]{background:#dbeafe;color:#1e40af}
@@ -48,11 +48,9 @@ body.mobile-editor-active .zoom-fab .round-btn{width:44px;height:44px}
  #editInspector:not(:has(.edit-fields))>.edit-row{margin:0}
  #editInspector:not(:has(.edit-fields))>p{grid-column:1/-1}
 }
-/* 2.6.1 cut + free draw tools */
+/* 2.8 direct-line + control-point editing */
 #editDock button[data-edit-tool="erase"][aria-pressed="true"]{background:#fee2e2;color:#b91c1c}
 #editDock button[data-edit-tool="draw"][aria-pressed="true"]{background:#ede9fe;color:#6d28d9}
-#planSvg .edit-freehand{pointer-events:none}
-/* 2.7 gesture-guided rerouting */
-#planSvg .edit-intent-corridor{fill:none;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
-#planSvg .edit-preview-handle-hit{pointer-events:all;cursor:grab}
-#planSvg .edit-preview-handle{pointer-events:none}
+#editDock button[data-edit-tool="points"][aria-pressed="true"]{background:#fef3c7;color:#92400e}
+#planSvg .edit-line-draft{pointer-events:none;stroke-linecap:round}
+@media(max-width:430px){#editDock button{font-size:11px}#editDock button b{font-size:18px}}

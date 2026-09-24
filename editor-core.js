@@ -25,9 +25,8 @@ function moveSegment(plan,selection,delta,locks=[]){
  const {circuit:ci,seg}=selection,c=plan.circuits[ci],r=copy(c.route),a=r[seg],b=r[seg+1];
  if(!a||!b||seg===0||seg>=r.length-2)return{ok:false,message:'Подключения перемещаются вместе с коллектором'};
  const horizontal=Math.abs(a.y-b.y)<1e-6,vertical=Math.abs(a.x-b.x)<1e-6;
- if(!horizontal&&!vertical)return{ok:false,message:'Выберите прямой участок трубы'};
  if(!Number.isFinite(delta))return{ok:false,message:'Введите расстояние в миллиметрах'};
- const axis=horizontal?'y':'x';a[axis]+=delta;b[axis]+=delta;
+ if(horizontal){a.y+=delta;b.y+=delta;}else if(vertical){a.x+=delta;b.x+=delta;}else{const dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy),nx=-dy/len,ny=dx/len;a.x+=nx*delta;a.y+=ny*delta;b.x+=nx*delta;b.y+=ny*delta;}
  const p=updated(plan,ci,r);if(!locksPreserved(p,locks))return{ok:false,message:'Участок закреплён'};
  return{ok:true,plan:p};
 }
@@ -37,6 +36,64 @@ function replace(plan,ci,start,end,path,locks=[]){
  if(!locksPreserved(p,locks))return{ok:false,message:'В выбранном участке есть закреплённая труба'};
  return{ok:true,plan:p};
 }
+
+function prepareSpan(input,plan,ci,first,second,locks=[]){
+ const r=plan.circuits[ci]?.route;
+ if(!r||!first||!second||first.circuit!==ci||second.circuit!==ci)return{ok:false,message:'Выберите две точки одного контура'};
+ if(first.seg!==second.seg)return{ok:false,message:'Вторая точка должна быть на той же прямой'};
+ const result=prepareCut(plan,ci,first,second,locks);if(!result.ok)return result;
+ if(result.end!==result.start+1)return{ok:false,message:'Выберите две точки на одном прямом участке'};
+ let n;try{n=E.normalize(input);}catch{return{ok:false,message:'Проверьте параметры схемы'}}
+ if(dist(result.a,result.b)<2*n.minBendRadiusMm-1e-6)return{ok:false,message:`Между точками нужно не меньше ${Math.ceil(2*n.minBendRadiusMm)} мм`};
+ return{...result,basePlan:copy(result.plan)};
+}
+function offsetSpan(input,plan,span,delta,locks=[]){
+ const ci=span?.circuit,start=span?.start,end=span?.end,r=plan.circuits[ci]?.route;
+ if(!r||end!==start+1||!Number.isFinite(delta))return{ok:false,message:'Сначала выберите две точки на одной прямой'};
+ const n=E.normalize(input),a=r[start],b=r[end],dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy);
+ if(len<2*n.minBendRadiusMm-1e-6)return{ok:false,message:`Выделенный отрезок должен быть не короче ${Math.ceil(2*n.minBendRadiusMm)} мм`};
+ if(Math.abs(delta)<2*n.minBendRadiusMm-1e-6)return{ok:false,message:`Сместите участок минимум на ${Math.ceil(2*n.minBendRadiusMm)} мм`};
+ const nx=-dy/len,ny=dx/len,p={x:a.x+nx*delta,y:a.y+ny*delta},q={x:b.x+nx*delta,y:b.y+ny*delta};
+ const route=E.clean([...r.slice(0,start+1),p,q,...r.slice(end)]),next=updated(plan,ci,route);
+ if(!locksPreserved(next,locks))return{ok:false,message:'В выбранном участке есть закреплённая труба'};
+ if(!E.bendsOK(route,n.minBendRadiusMm))return{ok:false,message:'Недостаточно места для минимального радиуса поворота'};
+ const hard=E.validate(input,next);if(!hard.ok)return{ok:false,message:'Дальше двигать нельзя: мешает граница, препятствие или другая труба',hard};
+ return{ok:true,plan:next,delta};
+}
+function offsetSpanClamped(input,plan,span,desired,locks=[]){
+ let n;try{n=E.normalize(input);}catch{return{ok:false,message:'Проверьте параметры схемы'}}
+ const sign=Math.sign(desired)||1,target=Math.abs(desired),minimum=2*n.minBendRadiusMm;
+ if(target<minimum)return{ok:true,plan:copy(plan),delta:0,clamped:true,message:`Минимальное смещение ${Math.ceil(minimum)} мм`};
+ const direct=offsetSpan(input,plan,span,sign*target,locks);if(direct.ok)return direct;
+ const first=offsetSpan(input,plan,span,sign*minimum,locks);if(!first.ok)return{ok:true,plan:copy(plan),delta:0,clamped:true,message:first.message};
+ let lo=minimum,hi=target,best=first;
+ for(let i=0;i<14;i++){const mid=(lo+hi)/2,candidate=offsetSpan(input,plan,span,sign*mid,locks);if(candidate.ok){lo=mid;best=candidate;}else hi=mid;}
+ return{...best,clamped:true};
+}
+function moveSegmentNormal(plan,selection,delta,locks=[]){
+ const {circuit:ci,seg}=selection||{},c=plan.circuits[ci],r=copy(c?.route||[]),a=r[seg],b=r[seg+1];
+ if(!a||!b||seg===0||seg>=r.length-2)return{ok:false,message:'Этот поворот связан с коллектором'};
+ if(!Number.isFinite(delta))return{ok:false,message:'Введите расстояние в миллиметрах'};
+ const dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy);if(len<1e-6)return{ok:false,message:'Слишком короткий участок'};
+ const nx=-dy/len,ny=dx/len;a.x+=nx*delta;a.y+=ny*delta;b.x+=nx*delta;b.y+=ny*delta;
+ const next=updated(plan,ci,r);if(!locksPreserved(next,locks))return{ok:false,message:'Участок закреплён'};
+ return{ok:true,plan:next};
+}
+function moveSegmentNormalClamped(input,plan,selection,desired,locks=[]){
+ const direct=moveSegmentNormal(plan,selection,desired,locks);if(direct.ok&&E.validate(input,direct.plan).ok)return{...direct,delta:desired};
+ const sign=Math.sign(desired)||1,target=Math.abs(desired);let lo=0,hi=target,best={ok:true,plan:copy(plan),delta:0,clamped:true};
+ for(let i=0;i<14;i++){const mid=(lo+hi)/2,candidate=moveSegmentNormal(plan,selection,sign*mid,locks);if(candidate.ok&&E.validate(input,candidate.plan).ok){lo=mid;best={...candidate,delta:sign*mid,clamped:true};}else hi=mid;}
+ return best;
+}
+function turnSelectionFromAnchor(plan,anchor,toward){
+ const ci=anchor?.circuit,seg=anchor?.seg,r=plan.circuits[ci]?.route;if(!r||seg==null||!r[seg+1])return null;
+ const a=r[seg],b=r[seg+1],at=anchor.at||projection(toward,a,b),vx=b.x-a.x,vy=b.y-a.y;
+ const side=((toward.x-at.x)*vx+(toward.y-at.y)*vy)>=0?1:-1,cross=(u,v,x,y)=>Math.abs(u*y-v*x);
+ if(side>0){for(let j=seg+1;j<r.length-1;j++){const p=r[j],q=r[j+1],wx=q.x-p.x,wy=q.y-p.y;if(cross(vx,vy,wx,wy)>1e-6*Math.max(1,Math.hypot(vx,vy)*Math.hypot(wx,wy)))return{circuit:ci,seg:j,corner:j,side};}}
+ else{for(let j=seg-1;j>=0;j--){const p=r[j],q=r[j+1],wx=q.x-p.x,wy=q.y-p.y;if(cross(vx,vy,wx,wy)>1e-6*Math.max(1,Math.hypot(vx,vy)*Math.hypot(wx,wy)))return{circuit:ci,seg:j,corner:j+1,side};}}
+ return null;
+}
+
 function routeDistance(p,route){let best=Infinity;for(const [a,b] of E.segments(route))best=Math.min(best,dist(p,projection(p,a,b)));return best;}
 function nearestFreePoint(p,space){let best=null;for(const r of space.rects){const pad=Math.min(2,Math.max(0,Math.min(r.width,r.height)/4)),q={x:Math.max(r.x+pad,Math.min(r.x+r.width-pad,p.x)),y:Math.max(r.y+pad,Math.min(r.y+r.height-pad,p.y))},d=dist(p,q);if(!best||d<best.distance)best={p:q,distance:d};}return best?.p||copy(p);}
 function guidedReplace(input,plan,ci,start,end,guide=[],locks=[],options={}){
@@ -198,5 +255,5 @@ function resizeWall(sections,edge,length){
  if(result.some(r=>r.width<50||r.height<50))throw new Error('Этот размер делает часть комнаты слишком узкой');
  return result;
 }
-return{copy,dist,same,projection,edgeKey,locksPreserved,updated,nearest,prepareCut,moveSegment,replace,guidedReplace,inspect,bypass,reconnect,boundaries,resizeWall,labels};
+return{copy,dist,same,projection,edgeKey,locksPreserved,updated,nearest,prepareCut,prepareSpan,offsetSpan,offsetSpanClamped,moveSegment,moveSegmentNormal,moveSegmentNormalClamped,turnSelectionFromAnchor,replace,guidedReplace,inspect,bypass,reconnect,boundaries,resizeWall,labels};
 });

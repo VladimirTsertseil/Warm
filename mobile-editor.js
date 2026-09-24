@@ -2,17 +2,17 @@
 (()=>{
 'use strict';
 const E=WarmEngine,C=WarmEditorCore,workspace=document.querySelector('#editorView .workspace'),panel=$('editInspector');
-const DRAFT_KEY='warm-editor-draft-v261',copy=C.copy,esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const DRAFT_KEY='warm-editor-draft-v280',copy=C.copy,esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const baseRender=renderPlan,baseSerialize=serializeState,baseLoad=loadScheme,baseNew=newScheme,baseZoom=zoomBy;
-let active=false,plan=null,baseline=null,locks=[],selection=null,hits=[],hitIndex=0,tool='select',returnTool='select',range=null,cutPick=null,gap=null,preview=null,drawPoints=[],compare=false,expanded=false,issues=[],validation=null;
+let active=false,plan=null,baseline=null,locks=[],selection=null,hits=[],hitIndex=0,tool='select',returnTool='select',range=null,cutPick=null,gap=null,preview=null,drawPoints=[],pointPick=null,pointSpan=null,liveLine=null,compare=false,expanded=false,issues=[],validation=null;
 let undo=[],redo=[],view=null,gesture=null,pointers=new Map(),persistTimer=null,frame=null,lastSize='',routing=null,cutBefore=null;
 const magnifier=document.createElement('div');magnifier.className='edit-magnifier';magnifier.hidden=true;workspace.append(magnifier);
 const resume=document.createElement('button');resume.className='secondary-btn edit-resume';resume.textContent='Продолжить черновик';resume.hidden=true;$('homeView').querySelector('.hero').append(resume);
 const btn=(id,text,extra='')=>`<button type="button" id="${id}" ${extra}>${text}</button>`;
 const field=(id,label,value,extra='')=>`<label>${label}<input id="${id}" type="number" inputmode="decimal" value="${Math.round(value*100)/100}" ${extra}></label>`;
 function params(){return WarmV260.input();}
-function pack(){return{plan:copy(plan),baseline:copy(baseline),locks:copy(locks),view:copy(view),scratch:{tool:tool==='more'?returnTool:tool,range:copy(range),cutPick:copy(cutPick),gap:copy(gap),drawPoints:copy(drawPoints),preview:copy(preview)}};}
-function restoreScratch(s){tool=s?.tool||'select';range=copy(s?.range||null);cutPick=copy(s?.cutPick||null);gap=copy(s?.gap||null);drawPoints=copy(s?.drawPoints||[]);preview=copy(s?.preview||null);if(preview)preview.validation=C.inspect(params(),preview.plan);}
+function pack(){return{plan:copy(plan),baseline:copy(baseline),locks:copy(locks),view:copy(view),scratch:{editorVersion:'2.8',tool:tool==='more'?returnTool:tool,range:copy(range),cutPick:copy(cutPick),gap:copy(gap),drawPoints:copy(drawPoints)}};}
+function restoreScratch(s){tool=s?.tool||'select';range=copy(s?.range||null);cutPick=copy(s?.cutPick||null);gap=copy(s?.gap||null);drawPoints=copy(s?.drawPoints||[]);preview=null;pointPick=null;pointSpan=null;liveLine=null;if(s?.editorVersion!=='2.8'&&gap){const r=plan?.circuits?.[gap.circuit]?.route;drawPoints=r?[copy(r[gap.start])]:[];}}
 function snapshot(){return{draft:pack(),geometry:{sections:copy(state.sections),obstacles:copy(state.obstacles||[]),supply:copy(state.supply),returnPoint:copy(state.returnPoint),shapeType:state.shapeType,shapeParams:copy(state.shapeParams),shapeAxes:copy(state.shapeAxes),roomAdded:[...state.roomAdded],roomRemoved:[...state.roomRemoved],excluded:[...state.excluded]}};}
 function restore(s){cancelRouting();cutBefore=null;plan=copy(s.draft.plan);baseline=copy(s.draft.baseline);locks=copy(s.draft.locks);const g=copy(s.geometry);for(const k of ['roomAdded','roomRemoved','excluded'])g[k]=new Set(g[k]);Object.assign(state,g);syncCollectors();recomputeGeometry();syncInputs();syncShapeUiV5();selection=null;restoreScratch(s.draft.scratch);check();render();scheduleSave();}
 function remember(before=snapshot()){undo.push(before);if(undo.length>60)undo.shift();redo=[];}
@@ -30,15 +30,15 @@ function syncCollectors(){state.collectorCountV23=1;state.collectorsV23=state.su
 function enter(){
  if(active)return;if(state.engineBusyV1)resetRoute();closeSheetV5();
  const saved=state.editorDraft;
- plan=copy(saved?.plan||state.enginePlanV1||{version:'2.7.0',planner:'unified-bcd',kind:'manual',circuits:[]});
+ plan=copy(saved?.plan||state.enginePlanV1||{version:'2.8.0',planner:'unified-bcd',kind:'manual',circuits:[]});
  if(!saved&&state.manualV2?.loaded&&state.manualV2.dirty&&state.manualV2.circuits?.length){const old=state.manualV2;plan.circuits=old.circuits.map(c=>({...copy(plan.circuits.find(x=>x.id===c.id)||{}),...copy(c),bendRadiusMm:requestedBendRadiusV10()}));}
  if(!plan.circuits.length&&state.route?.length)plan.circuits=[{id:1,route:copy(state.route),supply:copy(state.supply),returnPoint:copy(state.returnPoint),bendRadiusMm:requestedBendRadiusV10()}];
- baseline=copy(saved?.baseline||plan);locks=copy(saved?.locks||[]);selection=null;hits=[];range=null;cutPick=null;gap=null;cutBefore=null;preview=null;drawPoints=[];undo=[];redo=[];tool='select';expanded=false;compare=false;
+ baseline=copy(saved?.baseline||plan);locks=copy(saved?.locks||[]);selection=null;hits=[];range=null;cutPick=null;gap=null;cutBefore=null;preview=null;drawPoints=[];pointPick=null;pointSpan=null;liveLine=null;undo=[];redo=[];tool='select';expanded=false;compare=false;
  active=true;state.manualV2=blankManualStateV2A();state.manualV2.active=true;state.mode='manualV2';document.body.classList.add('mobile-editor-active','manual-v2-active');
  $('editActions').hidden=false;$('editDock').hidden=false;panel.hidden=false;view=saved?.view?copy(saved.view):null;
  restoreScratch(saved?.scratch);check();renderPanel();if(!view)fit();else render();scheduleSave();
  $('schemeTitle').textContent=state.name||'Правка плана';$('gridInfo').textContent='Изменения сохраняются';
- modeHint.textContent='Правка: двигайте участки, вырезайте фрагменты и показывайте новый путь грубым жестом. Два пальца — масштаб.';modeHint.classList.add('visible');
+ modeHint.textContent='Правка 2.8: рисуйте прямые отрезки, ставьте точки и двигайте участки. Два пальца — масштаб.';modeHint.classList.add('visible');
 }
 function deactivate(){cancelRouting();active=false;gesture=null;pointers.clear();magnifier.hidden=true;state.manualV2=blankManualStateV2A();state.mode='inspect';document.body.classList.remove('mobile-editor-active','manual-v2-active');$('editActions').hidden=true;$('editDock').hidden=true;panel.hidden=true;planSvg.classList.remove('manual-v2-mode');planSvg.style.removeProperty('width');planSvg.style.removeProperty('height');}
 function leave(draft=false){
@@ -92,9 +92,11 @@ function renderCanvas(){
  }
  if(cutPick&&!gap)html+=dot(cutPick.at,'А','#16a34a');
  if(range){const r=plan.circuits[range.circuit]?.route;if(r){html+=dot(r[range.start],'А','#16a34a');if(range.end!=null)html+=dot(r[range.end],'Б','#7c3aed');}}
- if(drawPoints.length&&!preview){html+=`<path class="edit-intent-corridor" d="${pathD(drawPoints)}" stroke="#7c3aed" stroke-width="28" opacity=".10" vector-effect="non-scaling-stroke"/><path class="edit-pipe edit-freehand" d="${pathD(drawPoints)}" stroke="#7c3aed" stroke-width="3" opacity=".78" stroke-dasharray="8 7"/>`;}
- if(preview?.path){html+=`<path class="edit-pipe" d="${pathD(preview.path)}" stroke="${preview.validation.ok?'#059669':'#b91c1c'}" stroke-width="5" stroke-dasharray="8 6"/>`;if(preview.kind!=='reconnect')for(let i=1;i<preview.path.length-1;i++){const p=preview.path[i];html+=`<circle class="edit-preview-handle-hit" data-preview-handle="${i}" cx="${p.x}" cy="${p.y}" r="${22/s}" fill="transparent"/><circle class="edit-preview-handle" cx="${p.x}" cy="${p.y}" r="${7/s}" fill="#7c3aed" stroke="white" stroke-width="2" vector-effect="non-scaling-stroke"/>`;}}
- if(gesture?.kind==='previewGuide'&&gesture.guide)html+=`<path class="edit-pipe" d="${pathD(gesture.guide)}" stroke="#7c3aed" stroke-width="3" opacity=".65" stroke-dasharray="6 6"/>`;
+ if(drawPoints.length&&!preview)html+=`<path class="edit-pipe edit-line-draft" d="${pathD(drawPoints)}" stroke="#7c3aed" stroke-width="4" opacity=".9"/>`;
+ if(liveLine)html+=line(liveLine.a,liveLine.b,liveLine.ok===false?'#b91c1c':'#7c3aed',4,'stroke-dasharray="8 6" opacity=".9"');
+ if(preview?.path)html+=`<path class="edit-pipe" d="${pathD(preview.path)}" stroke="${preview.validation.ok?'#059669':'#b91c1c'}" stroke-width="5" stroke-dasharray="8 6"/>`;
+ if(pointPick&&!pointSpan)html+=dot(pointPick.at,'1','#f59e0b');
+ if(pointSpan){html+=line(pointSpan.a,pointSpan.b,'#7c3aed',7,'opacity=".75"');html+=dot(pointSpan.a,'1','#7c3aed')+dot(pointSpan.b,'2','#7c3aed');}
  if(preview?.kind==='reconnect')preview.plan.circuits.forEach((c,ci)=>{const old=new Set(E.segments(plan.circuits[ci].route).map(e=>C.edgeKey(...e)));for(const edge of E.segments(c.route))if(!old.has(C.edgeKey(...edge)))html+=line(...edge,'#059669',5,'stroke-dasharray="8 6"');});
  const issue=(preview?.validation?.issues||issues)[0],badRoute=current.circuits[issue?.circuit]?.route,segment=issue?.segments[0];
  if(badRoute?.[segment+1]&&!gesture){const a=badRoute[segment],b=badRoute[segment+1],p={x:(a.x+b.x)/2,y:(a.y+b.y)/2};html+=`<circle cx="${p.x}" cy="${p.y}" r="${7/s}" fill="#b91c1c"/><text x="${p.x}" y="${p.y-13/s}" text-anchor="middle" font-family="system-ui" font-size="${12/s}" fill="#991b1b" stroke="white" stroke-width="${4/s}" paint-order="stroke">${esc(issue.message)}</text>`;}
@@ -102,8 +104,8 @@ function renderCanvas(){
  planSvg.innerHTML=html;
 }
 function wallDistance(sel=selection){
- const r=plan.circuits[sel.circuit].route,a=r[sel.seg],b=r[sel.seg+1],horizontal=Math.abs(a.y-b.y)<1e-6,mid={x:(a.x+b.x)/2,y:(a.y+b.y)/2};
- let best=null;for(const [u,v] of C.boundaries(params().sections)){
+ const r=plan.circuits[sel.circuit].route,a=r[sel.seg],b=r[sel.seg+1],horizontal=Math.abs(a.y-b.y)<1e-6,vertical=Math.abs(a.x-b.x)<1e-6,mid={x:(a.x+b.x)/2,y:(a.y+b.y)/2};
+ if(!horizontal&&!vertical)return null;let best=null;for(const [u,v] of C.boundaries(params().sections)){
   if(horizontal!==(u.y===v.y))continue;
   const along=horizontal?'x':'y',axis=horizontal?'y':'x';if(mid[along]<Math.min(u[along],v[along])||mid[along]>Math.max(u[along],v[along]))continue;
   const d=Math.abs(mid[axis]-u[axis]);if(!best||d<best.distance)best={distance:d,coordinate:u[axis],axis,sign:Math.sign(mid[axis]-u[axis])||1};
@@ -116,15 +118,19 @@ function renderPanel(){
  let html='';
  if(tool==='more'){
   html=`<div class="edit-context-head"><strong>Ещё</strong>${btn('editCloseMore','×','aria-label="Закрыть меню"')}</div><div class="edit-row">${btn('editLock',isLocked()?'Открепить':'Закрепить',selection?.type==='pipe'?'':'disabled')}${btn('editCompare',compare?'Скрыть сравнение':'Сравнить')}${btn('editFit','Весь план')}</div><div class="edit-row">${btn('editAutoBypass','Автообход')}${btn('editSaveDraft','Сохранить черновик')}${btn('editCheck','Проверить')}</div>`;
- }else if(preview){html=`<strong>${preview.kind==='reconnect'?'Подключение коллектора':'Маршрут А → Б'}</strong><p class="${preview.validation.ok?'':'edit-error'}">${preview.validation.ok?'Готово. Фиолетовые точки можно потянуть, если нужно изменить один из поворотов.':esc(preview.validation.issues[0]?.message||'Требуется правка')}</p><div class="edit-row">${btn('editApply','Применить',`class="edit-primary" ${preview.validation.ok?'':'aria-label="Применить в черновик"'}`)}${gap?btn('editResetDraw','Нарисовать заново'):''}${btn('editCancelRange','Отмена')}</div>`;
+ }else if(preview){html=`<strong>${preview.kind==='reconnect'?'Подключение коллектора':'Линии А → Б готовы'}</strong><p class="${preview.validation.ok?'':'edit-error'}">${preview.validation.ok?'Маршрут собран из заданных вами прямых. Повороты построены с минимальным допустимым радиусом.':esc(preview.validation.issues[0]?.message||'Требуется правка')}</p><div class="edit-row">${btn('editApply','Применить',`class="edit-primary" ${preview.validation.ok?'':'disabled'}`)}${gap?btn('editResetDraw','Начать заново'):''}${btn('editCancelRange','Отмена')}</div>`;
  }else if(tool==='erase'){
-  html=`<strong>${cutPick?'Теперь коснитесь конца Б':'Ластик: коснитесь начала А'}</strong><p>${cutPick?'Выберите вторую точку на этом же контуре. Участок между А и Б исчезнет.':'Можно выбрать точку прямо посередине прямого участка — не только на повороте.'}</p><div class="edit-row">${btn('editCancelRange','Отмена')}</div>`;
+  html=`<strong>${cutPick?'Теперь коснитесь конца Б':'Ластик: коснитесь начала А'}</strong><p>${cutPick?'Выберите вторую точку на этом же контуре. Участок между А и Б будет заменён вручную.':'Можно выбрать точку прямо посередине прямого участка — не только на повороте.'}</p><div class="edit-row">${btn('editCancelRange','Отмена')}</div>`;
  }else if(tool==='draw'&&gap){
   const started=drawPoints.length>1;
-  html=`<strong>${started?'Покажите путь до точки Б':'Проведите примерный путь А → Б'}</strong><p>Не рисуйте трубу точно. Просто грубо покажите пальцем, где она должна пройти — программа сама выпрямит маршрут, уберёт дрожание и рассчитает повороты.</p><div class="edit-row">${started?btn('editFinishDraw','Построить до Б','class="edit-primary"'):''}${started?btn('editResetDraw','Стереть жест'):''}${btn('editCancelRange','Отмена')}</div>`;
+  html=`<strong>Линия А → Б</strong><p>Зажмите конец фиолетовой линии, протяните один прямой отрезок и отпустите. Повторяйте. Подведите конец к Б — он защёлкнется.</p><div class="edit-row">${started?btn('editUndoLine','Удалить последний отрезок'):''}${started?btn('editResetDraw','Сначала'):''}${btn('editCancelRange','Отмена')}</div>`;
  }else if(tool==='draw'){
-  if(!plan.circuits.length)html=`<strong>Новый контур</strong><p>${state.supply?'Ставьте точки трубы на плане. Начало — у коллектора.':'Сначала укажите коллектор через основной экран.'}</p><div class="edit-row">${btn('editFinishNew','Соединить с обраткой',!drawPoints.length?'disabled':'')}${btn('editCancelRange','Отмена')}</div>`;
-  else html=`<strong>Сначала вырежьте старый участок</strong><p>Ластик создаст две точки А и Б, между которыми можно нарисовать трубу заново.</p><div class="edit-row">${btn('editUseEraser','Открыть ластик','class="edit-primary"')}${btn('editCancelRange','Отмена')}</div>`;
+  if(!plan.circuits.length)html=`<strong>Новый контур линиями</strong><p>${state.supply?'Зажмите активный конец трубы, протяните прямую и отпустите.':'Сначала укажите коллектор через основной экран.'}</p><div class="edit-row">${btn('editFinishNew','Соединить с обраткой',!drawPoints.length?'disabled':'')}${btn('editCancelRange','Отмена')}</div>`;
+  else html=`<strong>Линия</strong><p>Чтобы перерисовать часть существующего контура, сначала вырежьте её ластиком.</p><div class="edit-row">${btn('editUseEraser','Открыть ластик','class="edit-primary"')}${btn('editCancelRange','Отмена')}</div>`;
+ }else if(tool==='points'){
+  if(pointSpan)html=`<strong>Выделен отрезок между точками 1–2</strong><p>Потяните выделенную часть перпендикулярно в сторону. Warm сам ограничит движение стенами, препятствиями и минимальным радиусом.</p><div class="edit-row">${btn('editClearPoints','Сбросить точки')}${btn('editCancelRange','Готово')}</div>`;
+  else if(pointPick)html=`<strong>Точка 1 поставлена</strong><p>Коснитесь второй точки на этой же прямой — получите участок для смещения. Или зажмите трубу слева/справа от точки и потяните: изменится ближайший поворот с выбранной стороны.</p><div class="edit-row">${btn('editClearPoints','Убрать точку')}${btn('editCancelRange','Готово')}</div>`;
+  else html=`<strong>Точки поворота</strong><p>Одна точка помогает сдвинуть ближайший поворот. Две точки на одной прямой выделяют участок, который можно оттянуть перпендикулярно.</p><div class="edit-row">${btn('editCancelRange','Готово')}</div>`;
  }else if(tool==='rebuild'){
   const instruction=!range?'Коснитесь начала участка А':range.end==null?'Коснитесь конца Б на том же контуре':'Выбран участок А → Б';
   html=`<strong>${instruction}</strong><p>Точки привязываются к ближайшему повороту трубы.</p><div class="edit-row">${range?.end!=null?btn('editBypass','Обойти препятствие','class="edit-primary"'):''}${btn('editCancelRange','Отмена')}</div>`;
@@ -152,9 +158,9 @@ function render(){renderPanel();renderCanvas();}
 function isLocked(){if(selection?.type!=='pipe')return false;const c=plan.circuits[selection.circuit],r=c.route;return locks.some(l=>l.circuit===c.id&&l.edge===C.edgeKey(r[selection.seg],r[selection.seg+1]));}
 function move(delta){if(selection?.type!=='pipe')return;const result=C.moveSegment(plan,selection,delta,locks);if(!result.ok){setStatus(result.message,true);return;}commit(result.plan);}
 function cycle(step){if(!hits.length)return;hitIndex=(hitIndex+step+hits.length)%hits.length;selection={type:'pipe',...hits[hitIndex]};render();}
-function cancelRange(){cancelRouting();cutBefore=null;tool='select';range=null;cutPick=null;gap=null;preview=null;drawPoints=[];render();scheduleSave();}
+function cancelRange(){cancelRouting();cutBefore=null;tool='select';range=null;cutPick=null;gap=null;preview=null;drawPoints=[];pointPick=null;pointSpan=null;liveLine=null;render();scheduleSave();}
 function selectTool(next){
- cancelRouting();cancelGesture();
+ cancelRouting();cancelGesture();liveLine=null;pointPick=null;pointSpan=null;
  if(next==='more'){if(tool==='more')tool=returnTool;else{returnTool=tool;tool='more';}render();scheduleSave();return;}
  if(gap&&next==='draw'){tool='draw';expanded=false;render();scheduleSave();return;}
  preview=null;drawPoints=[];range=null;cutPick=null;gap=null;cutBefore=null;tool=next;expanded=false;selection=null;
@@ -165,57 +171,61 @@ function setPreview(result,path,kind='local'){if(result.cancelled)return;if(!res
 function cancelRouting(){routing?.cancel();routing=null;}
 function search(operation,extra={}){
  cancelRouting();const data={operation,input:params(),plan:copy(plan),locks:copy(locks),range:copy(range),...copy(extra)},signature=JSON.stringify([data.input,data.plan,data.locks,data.range,data.guide||null]);
- return new Promise(resolve=>{const worker=new Worker('./editor-worker.js?v=270-gesture-router1');let timer;const finish=result=>{clearTimeout(timer);worker.terminate();routing=null;resolve(active&&signature===JSON.stringify([params(),plan,locks,range,data.guide||null])?result:{cancelled:true});};routing={cancel:()=>finish({cancelled:true})};timer=setTimeout(()=>finish({ok:false,message:'Поиск занял слишком много времени. Проведите линию проще.'}),15000);worker.onmessage=e=>finish(e.data);worker.onerror=()=>finish({ok:false,message:'Не удалось построить участок.'});worker.postMessage(data);});
+ return new Promise(resolve=>{const worker=new Worker('./editor-worker.js?v=280-cad1');let timer;const finish=result=>{clearTimeout(timer);worker.terminate();routing=null;resolve(active&&signature===JSON.stringify([params(),plan,locks,range,data.guide||null])?result:{cancelled:true});};routing={cancel:()=>finish({cancelled:true})};timer=setTimeout(()=>finish({ok:false,message:'Поиск занял слишком много времени. Проведите линию проще.'}),15000);worker.onmessage=e=>finish(e.data);worker.onerror=()=>finish({ok:false,message:'Не удалось построить участок.'});worker.postMessage(data);});
 }
 function appendDraw(p,snap=true){const last=drawPoints.at(-1);p=snap?{x:Math.round(p.x/10)*10,y:Math.round(p.y/10)*10}:copy(p);if(!last){drawPoints=[p];return;}if(Math.abs(p.x-last.x)>Math.abs(p.y-last.y))drawPoints.push({x:p.x,y:last.y},p);else drawPoints.push({x:last.x,y:p.y},p);drawPoints=E.clean(drawPoints);}
-function magneticContext(){
- if(!gap)return null;const n=E.normalize(params()),space=E.freeSpace(n),r=plan.circuits[gap.circuit]?.route,a=r?.[gap.start],b=r?.[gap.end];if(!r||!a||!b)return null;
- const clear=n.pipeDiameterMm*1.5+2,occupied=[];
+function lineContext(){
+ const n=E.normalize(params()),space=E.freeSpace(n),clear=n.pipeDiameterMm*1.5+2,occupied=[];
+ let r=null,a=null,b=null,pre=null,post=null;
+ if(gap){r=plan.circuits[gap.circuit]?.route;a=r?.[gap.start];b=r?.[gap.end];pre=r?.[gap.start-1]||null;post=r?.[gap.end+1]||null;}
  plan.circuits.forEach((c,cj)=>E.segments(c.route).forEach(([u,v],i)=>{
-  if(cj===gap.circuit&&i>=gap.start&&i<gap.end)return;
+  if(gap&&cj===gap.circuit&&i>=gap.start&&i<gap.end)return;
   let p=copy(u),q=copy(v);
-  if(cj===gap.circuit&&i===gap.start-1){const d=C.dist(p,q);if(d<=clear)return;q={x:q.x+(p.x-q.x)*clear/d,y:q.y+(p.y-q.y)*clear/d};}
-  if(cj===gap.circuit&&i===gap.end){const d=C.dist(p,q);if(d<=clear)return;p={x:p.x+(q.x-p.x)*clear/d,y:p.y+(q.y-p.y)*clear/d};}
+  if(gap&&cj===gap.circuit&&i===gap.start-1){const d=C.dist(p,q);if(d<=clear)return;q={x:q.x+(p.x-q.x)*clear/d,y:q.y+(p.y-q.y)*clear/d};}
+  if(gap&&cj===gap.circuit&&i===gap.end){const d=C.dist(p,q);if(d<=clear)return;p={x:p.x+(q.x-p.x)*clear/d,y:p.y+(q.y-p.y)*clear/d};}
   occupied.push([p,q]);
  }));
- return{n,space,r,a,b,pre:r[gap.start-1]||null,post:r[gap.end+1]||null,occupied,clearance:n.pipeDiameterMm*1.5};
+ const draft=E.segments(drawPoints);draft.forEach(([u,v],i)=>{let p=copy(u),q=copy(v);if(i===draft.length-1){const d=C.dist(p,q);if(d<=clear)return;q={x:q.x+(p.x-q.x)*clear/d,y:q.y+(p.y-q.y)*clear/d};}occupied.push([p,q]);});
+ return{n,space,r,a,b,pre,post,occupied,clearance:n.pipeDiameterMm*1.5};
 }
 function clampFree(p,ctx,grid=10){
  let best=null;for(const r of ctx.space.rects){const pad=Math.min(2,Math.max(0,Math.min(r.width,r.height)/4)),q={x:Math.max(r.x+pad,Math.min(r.x+r.width-pad,p.x)),y:Math.max(r.y+pad,Math.min(r.y+r.height-pad,p.y))},d=C.dist(p,q);if(!best||d<best.d)best={p:q,d};}
  const q=best?best.p:copy(p);if(grid){q.x=Math.round(q.x/grid)*grid;q.y=Math.round(q.y/grid)*grid;}
- // Rounding can land just outside a narrow eroded rectangle; clamp once more.
  if(ctx.space.contains(q))return q;best=null;for(const r of ctx.space.rects){const x=Math.max(r.x+1,Math.min(r.x+r.width-1,q.x)),y=Math.max(r.y+1,Math.min(r.y+r.height-1,q.y)),d=Math.hypot(q.x-x,q.y-y);if(!best||d<best.d)best={p:{x,y},d};}return best?.p||q;
 }
 function segmentClear(a,b,ctx){return C.dist(a,b)<1||ctx.space.covers(a,b)&&!ctx.occupied.some(([u,v])=>E.segmentDistance(a,b,u,v)<ctx.clearance-1e-6);}
 function safeEndpoint(a,b,ctx){
  if(segmentClear(a,b,ctx))return b;let lo=0,hi=1;for(let i=0;i<18;i++){const t=(lo+hi)/2,p={x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t};if(segmentClear(a,p,ctx))lo=t;else hi=t;}const t=Math.max(0,lo-.002),raw={x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t},q={x:Math.round(raw.x/10)*10,y:Math.round(raw.y/10)*10};return segmentClear(a,q,ctx)?q:raw;
 }
-function appendIntent(p,force=false,g=gesture){
- if(!g?.drawCtx)return;let q=clampFree(p,g.drawCtx,0);
- if(C.dist(p,g.drawCtx.b)*view.scale<=52)q=copy(g.drawCtx.b);
- const last=drawPoints.at(-1),minPx=force?1:7;if(last&&C.dist(last,q)*view.scale<minPx)return;
- drawPoints.push(q);
- // Bound memory on long touch strokes without changing the broad path.
- if(drawPoints.length>180){const first=drawPoints[0],lastPoint=drawPoints.at(-1),middle=drawPoints.slice(1,-1).filter((_,i)=>i%2===0);drawPoints=[first,...middle,lastPoint];}
+function lineEndpoint(raw,ctx,start){
+ if(ctx.b&&C.dist(raw,ctx.b)*view.scale<=48&&segmentClear(start,ctx.b,ctx))return{p:copy(ctx.b),snapped:true};
+ const q=clampFree(raw,ctx,10),safe=safeEndpoint(start,q,ctx);return{p:safe,snapped:false};
 }
-function previewHandleAt(p){
- if(!preview?.path||preview.kind==='reconnect'||preview.path.length<3)return null;let best=null;
- for(let i=1;i<preview.path.length-1;i++){const d=C.dist(p,preview.path[i])*view.scale;if(d<=28&&(!best||d<best.d))best={i,d};}
- return best?.i??null;
+function partialLineOK(path,ctx,closing=false){
+ const check=[...(ctx.pre?[ctx.pre]:[]),...path,...(closing&&ctx.post?[ctx.post]:[])];
+ if(!E.bendsOK(E.clean(check),ctx.n.minBendRadiusMm))return{ok:false,message:`Для поворота нужно больше места: Rmin ${Math.ceil(ctx.n.minBendRadiusMm)} мм`};
+ const ss=E.segments(path);for(let i=0;i<ss.length;i++)for(let j=0;j<i-1;j++)if(E.intersect(...ss[i],...ss[j]))return{ok:false,message:'Новая линия пересекает уже нарисованный участок'};
+ return{ok:true};
 }
-function finishFreeDraw(force=true,tip=null){
- if(!gap)return false;const r=plan.circuits[gap.circuit]?.route,a=r?.[gap.start],b=r?.[gap.end];if(!a||!b)return false;
- if(drawPoints.length<2){setStatus('Проведите жестом примерный путь от А к Б.',true);return false;}
- const near=C.dist(tip||drawPoints.at(-1),b)*view.scale<=58;if(!force&&!near)return false;
- const guide=drawPoints.map(copy);if(!C.same(guide[0],a))guide.unshift(copy(a));if(!C.same(guide.at(-1),b))guide.push(copy(b));
- setStatus('Понимаю жест и строю аккуратный маршрут…');
- search('guided',{guide,mode:'gesture'}).then(result=>{if(result.cancelled)return;setPreview(result,result.path);if(!preview)renderPanel();});return true;
+function finishLineSegment(g,tip){
+ const start=g.startPoint,hit=lineEndpoint(tip,g.drawCtx,start),q=hit.p;if(C.dist(start,q)<5){setStatus('Протяните линию дальше.');return false;}
+ const path=E.clean([...drawPoints,q]),test=partialLineOK(path,g.drawCtx,hit.snapped);if(!test.ok){setStatus(test.message,true);return false;}
+ if(hit.snapped&&gap){const result=C.replace(plan,gap.circuit,gap.start,gap.end,path,locks);if(!result.ok){setStatus(result.message,true);return false;}const inspected=C.inspect(params(),result.plan);if(!inspected.ok){setStatus(inspected.issues[0]?.message||'Этот последний отрезок не помещается.',true);return false;}remember(g.before);drawPoints=path;preview={plan:result.plan,path:copy(path),kind:'line',validation:inspected};liveLine=null;render();scheduleSave();setStatus('Соединено с Б. Проверьте и нажмите «Применить».');return true;}
+ remember(g.before);drawPoints=path;liveLine=null;render();scheduleSave();setStatus('Отрезок добавлен. Тяните следующий от его конца.');return true;
 }
+function pointTap(p){
+ const found=C.nearest(plan,p,28/view.scale)[0];if(!found){pointPick=null;pointSpan=null;setStatus('Коснитесь прямого участка трубы.');render();return;}
+ if(!pointPick){pointPick={circuit:found.circuit,seg:found.seg,at:copy(found.at)};pointSpan=null;selection=null;render();setStatus('Точка 1. Теперь поставьте точку 2 на этой же прямой или потяните вдоль трубы в сторону нужного поворота.');return;}
+ if(found.circuit!==pointPick.circuit||found.seg!==pointPick.seg){setStatus('Для смещения участка поставьте вторую точку на той же прямой.',true);return;}
+ const result=C.prepareSpan(params(),plan,pointPick.circuit,pointPick,found,locks);if(!result.ok){setStatus(result.message,true);return;}
+ pointSpan={circuit:result.circuit,start:result.start,end:result.end,a:copy(result.a),b:copy(result.b),basePlan:copy(result.plan)};pointPick=null;selection=null;render();setStatus('Участок 1–2 выбран. Потяните его перпендикулярно в сторону.');
+}
+function spanHandleAt(p){if(!pointSpan)return false;const at=C.projection(p,pointSpan.a,pointSpan.b);return C.dist(p,at)*view.scale<=30;}
 function eraseTap(p){
  const found=C.nearest(plan,p,28/view.scale).find(h=>!cutPick||h.circuit===cutPick.circuit);if(!found){setStatus(cutPick?'Коснитесь этой же трубы.':'Коснитесь трубы в месте начала выреза.');return;}
  if(!cutPick){cutBefore=snapshot();cutPick={circuit:found.circuit,seg:found.seg,at:copy(found.at)};selection=null;render();scheduleSave();return;}
  const before=cutBefore||snapshot(),result=C.prepareCut(plan,cutPick.circuit,cutPick,found,locks);if(!result.ok){setStatus(result.message,true);return;}
- plan=result.plan;range={circuit:result.circuit,start:result.start,end:result.end};gap=copy(range);cutPick=null;cutBefore=null;drawPoints=[copy(result.a)];preview=null;tool='draw';selection=null;remember(before);check();render();scheduleSave();setStatus('Участок вырезан. Проведите новую трубу от А к Б.');
+ plan=result.plan;range={circuit:result.circuit,start:result.start,end:result.end};gap=copy(range);cutPick=null;cutBefore=null;drawPoints=[copy(result.a)];preview=null;tool='draw';selection=null;remember(before);check();render();scheduleSave();setStatus('Участок вырезан. Рисуйте новый путь прямыми отрезками от А к Б.');
 }
 function rangeTap(p){
  if(!plan.circuits.length){if(tool==='draw'&&drawPoints.length){remember();appendDraw(p);renderCanvas();renderPanel();scheduleSave();}return;}
@@ -242,8 +252,9 @@ function editObstacle(){const i=selection.index,o=state.obstacles[i],gaps=obstac
 function tap(p){
  if(tool==='more')tool=returnTool;
  if(tool==='erase'){eraseTap(p);return;}
+ if(tool==='points'){pointTap(p);return;}
  if(tool==='rebuild'){rangeTap(p);return;}
- if(tool==='draw'){if(!plan.circuits.length){rangeTap(p);return;}if(gap){setStatus('Проведите линию от А к Б, не отдельными касаниями.');return;}setStatus('Сначала вырежьте участок ластиком.');return;}
+ if(tool==='draw'){if(gap||!plan.circuits.length){setStatus('Зажмите активный конец линии, протяните прямой отрезок и отпустите.');return;}setStatus('Сначала вырежьте участок ластиком.');return;}
  const col=centerCollector();if(col&&C.dist(p,col)*view.scale<28){selection={type:'collector'};expanded=false;render();return;}
  const obstacle=(state.obstacles||[]).findIndex(o=>p.x>=o.x&&p.x<=o.x+o.width&&p.y>=o.y&&p.y<=o.y+o.height);
  if(obstacle>=0){selection={type:'obstacle',index:obstacle};expanded=false;render();return;}
@@ -253,15 +264,19 @@ function tap(p){
  selection=hits.length?{type:'pipe',...hits[0]}:null;expanded=false;render();
 }
 function handleAt(p){if(tool!=='select')return null;if(selection?.type==='pipe'){const r=plan.circuits[selection.circuit].route,a=r[selection.seg],b=r[selection.seg+1];if(C.dist(p,{x:(a.x+b.x)/2,y:(a.y+b.y)/2})*view.scale<=22)return'pipe';}if(selection?.type==='collector'&&C.dist(p,centerCollector())*view.scale<=28)return'collector';return null;}
-function cancelGesture(){if(gesture?.before&&gesture.kind!=='pinch'){const b=gesture.before;plan=copy(b.draft.plan);state.supply=copy(b.geometry.supply);state.returnPoint=copy(b.geometry.returnPoint);syncCollectors();if(gesture.kind==='freeDraw')restoreScratch(b.draft.scratch);check();}gesture=null;magnifier.hidden=true;}
+function cancelGesture(){if(gesture?.before&&gesture.kind!=='pinch'){const b=gesture.before;plan=copy(b.draft.plan);state.supply=copy(b.geometry.supply);state.returnPoint=copy(b.geometry.returnPoint);syncCollectors();if(gesture.kind==='lineDraw')restoreScratch(b.draft.scratch);check();}gesture=null;liveLine=null;magnifier.hidden=true;}
 function down(e){
  if(!active||e.target.closest('button')||e.button>0)return;e.preventDefault();e.stopPropagation();
  pointers.set(e.pointerId,{clientX:e.clientX,clientY:e.clientY});try{diagramScroll.setPointerCapture(e.pointerId);}catch{}
  if(pointers.size===2){cancelGesture();const [a,b]=[...pointers.values()];gesture={kind:'pinch',distance:Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY),view:copy(view),mid:{clientX:(a.clientX+b.clientX)/2,clientY:(a.clientY+b.clientY)/2}};render();return;}
  if(pointers.size>2)return;
  const p=point(e);
- if(tool==='draw'&&gap&&preview?.path){const i=previewHandleAt(p);if(i!=null){gesture={kind:'previewGuide',pointerId:e.pointerId,start:{clientX:e.clientX,clientY:e.clientY},world:p,view:copy(view),moved:false,index:i,guide:copy(preview.path),ctx:magneticContext()};return;}}
- if(tool==='draw'&&gap&&!preview){cancelRouting();const r=plan.circuits[gap.circuit]?.route,start=drawPoints.at(-1)||r?.[gap.start];if(!start||C.dist(p,start)*view.scale>38){gesture={kind:'drawBlocked',pointerId:e.pointerId,start:{clientX:e.clientX,clientY:e.clientY},view:copy(view),moved:false};setStatus(drawPoints.length>1?'Продолжите жест с конца фиолетовой линии.':'Начните жест из точки А.');return;}const ctx=magneticContext();gesture={kind:'freeDraw',pointerId:e.pointerId,start:{clientX:e.clientX,clientY:e.clientY},world:p,view:copy(view),before:snapshot(),moved:false,drawCtx:ctx};return;}
+ if(tool==='draw'&&!preview&&(gap||!plan.circuits.length)){
+  cancelRouting();const start=drawPoints.at(-1);if(!start||C.dist(p,start)*view.scale>38){gesture={kind:'drawBlocked',pointerId:e.pointerId,start:{clientX:e.clientX,clientY:e.clientY},view:copy(view),moved:false};setStatus('Начните новый отрезок с конца фиолетовой линии.');return;}
+  const ctx=lineContext();gesture={kind:'lineDraw',pointerId:e.pointerId,start:{clientX:e.clientX,clientY:e.clientY},world:p,startPoint:copy(start),view:copy(view),before:snapshot(),moved:false,drawCtx:ctx};liveLine={a:copy(start),b:copy(start),ok:true};return;
+ }
+ if(tool==='points'&&pointSpan&&spanHandleAt(p)){gesture={kind:'spanOffset',pointerId:e.pointerId,start:{clientX:e.clientX,clientY:e.clientY},world:p,view:copy(view),before:snapshot(),moved:false,span:copy(pointSpan),basePlan:copy(pointSpan.basePlan),lastDelta:0};return;}
+ if(tool==='points'&&pointPick){const found=C.nearest(plan,p,30/view.scale).find(h=>h.circuit===pointPick.circuit&&h.seg===pointPick.seg);if(found){gesture={kind:'turnPick',pointerId:e.pointerId,start:{clientX:e.clientX,clientY:e.clientY},world:p,view:copy(view),before:snapshot(),moved:false,anchor:copy(pointPick),basePlan:copy(plan),target:null,lastDelta:0};return;}}
  const handle=handleAt(p);gesture={kind:handle||'pan',pointerId:e.pointerId,start:{clientX:e.clientX,clientY:e.clientY},world:p,view:copy(view),before:handle?snapshot():null,moved:false};
 }
 function showMagnifier(e,p){const r=workspace.getBoundingClientRect(),size=workspace.clientHeight<220?112:142;const left=Math.max(4,Math.min(r.width-size-4,e.clientX-r.left-size/2)),top=Math.max(4,e.clientY-r.top-size-36);magnifier.style.left=left+'px';magnifier.style.top=top+'px';magnifier.hidden=false;const side=size/(view.scale*2.5);magnifier.innerHTML=`<svg viewBox="${p.x-side/2} ${p.y-side/2} ${side} ${side}" xmlns="http://www.w3.org/2000/svg">${planSvg.innerHTML}</svg>`;}
@@ -273,21 +288,30 @@ function motion(e){
  const dx=e.clientX-gesture.start.clientX,dy=e.clientY-gesture.start.clientY;if(Math.hypot(dx,dy)>5)gesture.moved=true;if(!gesture.moved)return;
  if(gesture.kind==='drawBlocked')return;
  if(gesture.kind==='pan'){view.x=gesture.view.x-dx/view.scale;view.y=gesture.view.y-dy/view.scale;renderCanvas();return;}
- if(gesture.kind==='freeDraw'){appendIntent(point(e));renderCanvas();showMagnifier(e,drawPoints.at(-1)||point(e));return;}
- if(gesture.kind==='previewGuide'){const q=clampFree(point(e),gesture.ctx,0);gesture.guide[gesture.index]=q;renderCanvas();showMagnifier(e,q);return;}
+ if(gesture.kind==='lineDraw'){const hit=lineEndpoint(point(e),gesture.drawCtx,gesture.startPoint);liveLine={a:copy(gesture.startPoint),b:copy(hit.p),ok:true,snapped:hit.snapped};renderCanvas();showMagnifier(e,hit.p);return;}
+ if(gesture.kind==='spanOffset'){
+  const a=gesture.span.a,b=gesture.span.b,len=C.dist(a,b),nx=-(b.y-a.y)/len,ny=(b.x-a.x)/len,w=point(e),delta=Math.round(((w.x-gesture.world.x)*nx+(w.y-gesture.world.y)*ny)/10)*10,result=C.offsetSpanClamped(params(),gesture.basePlan,gesture.span,delta,locks);
+  if(result.ok){plan=result.plan;gesture.lastDelta=result.delta||0;renderCanvas();showMagnifier(e,w);}return;
+ }
+ if(gesture.kind==='turnPick'){
+  const w=point(e);if(!gesture.target){gesture.target=C.turnSelectionFromAnchor(gesture.basePlan,gesture.anchor,w);if(!gesture.target)return;selection={type:'pipe',...gesture.target};}
+  const rr=gesture.basePlan.circuits[gesture.target.circuit].route,a=rr[gesture.target.seg],b=rr[gesture.target.seg+1],len=C.dist(a,b),nx=-(b.y-a.y)/len,ny=(b.x-a.x)/len,delta=Math.round(((w.x-gesture.world.x)*nx+(w.y-gesture.world.y)*ny)/10)*10,result=C.moveSegmentNormalClamped(params(),gesture.basePlan,gesture.target,delta,locks);
+  if(result.ok){plan=result.plan;gesture.lastDelta=result.delta||0;renderCanvas();showMagnifier(e,w);}return;
+ }
  if(gesture.kind==='pipe'){
-  const r=gesture.before.draft.plan.circuits[selection.circuit].route,h=Math.abs(r[selection.seg].y-r[selection.seg+1].y)<1e-6,delta=Math.round((h?dy:dx)/view.scale/10)*10,result=C.moveSegment(gesture.before.draft.plan,selection,delta,locks);
-  if(result.ok){plan=result.plan;renderCanvas();showMagnifier(e,point(e));}
+  const r=gesture.before.draft.plan.circuits[selection.circuit].route,a=r[selection.seg],b=r[selection.seg+1],h=Math.abs(a.y-b.y)<1e-6,v=Math.abs(a.x-b.x)<1e-6,w=point(e),len=C.dist(a,b),nx=-(b.y-a.y)/len,ny=(b.x-a.x)/len,raw=h?dy/view.scale:v?dx/view.scale:(w.x-gesture.world.x)*nx+(w.y-gesture.world.y)*ny,delta=Math.round(raw/10)*10,result=C.moveSegment(gesture.before.draft.plan,selection,delta,locks);
+  if(result.ok){plan=result.plan;renderCanvas();showMagnifier(e,w);}
  }else if(gesture.kind==='collector'){placeCollector(point(e));renderCanvas();showMagnifier(e,point(e));}
 }
 function up(e){
  if(!active||!pointers.has(e.pointerId))return;e.preventDefault();e.stopPropagation();pointers.delete(e.pointerId);magnifier.hidden=true;
  if(gesture?.kind==='pinch'){if(!pointers.size){gesture=null;scheduleSave();}return;}
  const g=gesture;if(!g)return;gesture=null;
- if(e.type==='pointercancel'){if(g.before){plan=copy(g.before.draft.plan);state.supply=copy(g.before.geometry.supply);state.returnPoint=copy(g.before.geometry.returnPoint);syncCollectors();if(g.kind==='freeDraw')restoreScratch(g.before.draft.scratch);check();render();}return;}
+ if(e.type==='pointercancel'){if(g.before){plan=copy(g.before.draft.plan);state.supply=copy(g.before.geometry.supply);state.returnPoint=copy(g.before.geometry.returnPoint);syncCollectors();if(g.kind==='lineDraw')restoreScratch(g.before.draft.scratch);check();render();}liveLine=null;return;}
  if(g.kind==='drawBlocked')return;
- if(g.kind==='freeDraw'){if(!g.moved){setStatus(drawPoints.length>1?'Продолжите жест к точке Б.':'Зажмите в точке А и грубо проведите путь к Б.');render();return;}const tip=point(e);appendIntent(tip,true,g);remember(g.before);if(!finishFreeDraw(false,tip)){render();scheduleSave();}return;}
- if(g.kind==='previewGuide'){if(!g.moved){render();return;}setStatus('Перестраиваю маршрут вокруг выбранного поворота…');search('guided',{guide:g.guide,mode:'adjust',pin:g.guide[g.index]}).then(result=>{if(result.cancelled)return;setPreview(result,result.path);if(!preview)renderPanel();});return;}
+ if(g.kind==='lineDraw'){liveLine=null;if(!g.moved){setStatus('Зажмите конец линии и протяните прямой отрезок.');render();return;}finishLineSegment(g,point(e));return;}
+ if(g.kind==='spanOffset'){if(!g.moved||!g.lastDelta){plan=copy(g.before.draft.plan);render();return;}remember(g.before);check();pointPick=null;pointSpan=null;selection=null;render();scheduleSave();setStatus('Участок смещён. Радиусы и границы соблюдены.');return;}
+ if(g.kind==='turnPick'){if(!g.moved){pointTap(point(e));return;}if(!g.target||!g.lastDelta){plan=copy(g.before.draft.plan);render();setStatus('В этой стороне нет доступного поворота для перемещения.');return;}remember(g.before);check();pointPick=null;pointSpan=null;selection={type:'pipe',...g.target};render();scheduleSave();setStatus('Положение ближайшего поворота изменено.');return;}
  if(!g.moved){tap(point(e));return;}
  if(g.before){if(JSON.stringify(g.before.draft.plan)!==JSON.stringify(plan)||JSON.stringify(g.before.geometry.supply)!==JSON.stringify(state.supply)){remember(g.before);check();scheduleSave();}render();}else scheduleSave();
 }
@@ -308,10 +332,11 @@ panel.addEventListener('click',async e=>{
  if(id==='editAutoBypass')selectTool('rebuild');if(id==='editUseEraser')selectTool('erase');
  if(id==='editCheck'){check();render();setStatus(validation.ok?'Схема прошла проверку':issues[0]?.message,true&&!validation.ok);}
  if(id==='editCancelRange')cancelRange();
- if(id==='editResetDraw'&&gap){remember();const r=plan.circuits[gap.circuit]?.route;drawPoints=r?[copy(r[gap.start])]:[];preview=null;render();scheduleSave();}
+ if(id==='editClearPoints'){pointPick=null;pointSpan=null;selection=null;render();scheduleSave();}
+ if(id==='editResetDraw'&&gap){remember();const r=plan.circuits[gap.circuit]?.route;drawPoints=r?[copy(r[gap.start])]:[];preview=null;liveLine=null;render();scheduleSave();}
+ if(id==='editUndoLine'&&gap&&drawPoints.length>1){remember();drawPoints=drawPoints.slice(0,-1);preview=null;liveLine=null;render();scheduleSave();}
  if(id==='editBypass'&&range?.end!=null){e.target.disabled=true;e.target.textContent='Ищу обход…';const result=await search('bypass');setPreview(result,result.path);if(!preview)renderPanel();}
  if(id==='editReconnect'){e.target.disabled=true;e.target.textContent='Подключаю…';const result=await search('reconnect');setPreview(result,null,'reconnect');if(!preview)renderPanel();}
- if(id==='editFinishDraw'&&range?.end!=null){if(gap)finishFreeDraw(true);else{const r=plan.circuits[range.circuit].route,b=r[range.end];appendDraw(b,false);const path=E.clean(drawPoints);setPreview(C.replace(plan,range.circuit,range.start,range.end,path,locks),path);}}
  if(id==='editFinishNew'&&drawPoints.length){try{const n=E.normalize(params()),ports=E.manifoldPorts(n,1,E.freeSpace(n));appendDraw(ports[0].innerReturn,false);drawPoints.push(ports[0].returnPoint);const path=E.clean(drawPoints),next=copy(plan);next.manifold=ports;next.circuits=[{id:1,route:path,core:path,supply:ports[0].supply,returnPoint:ports[0].returnPoint,bendRadiusMm:n.minBendRadiusMm,length:E.length(path)}];setPreview({ok:true,plan:next},path);}catch{setStatus('Укажите коллектор на стене.',true);}}
  if(id==='editApply'&&preview){const next=preview.plan;commit(next);cancelRange();}
 });
