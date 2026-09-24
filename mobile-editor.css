@@ -52,3 +52,7 @@ body.mobile-editor-active .zoom-fab .round-btn{width:44px;height:44px}
 #editDock button[data-edit-tool="erase"][aria-pressed="true"]{background:#fee2e2;color:#b91c1c}
 #editDock button[data-edit-tool="draw"][aria-pressed="true"]{background:#ede9fe;color:#6d28d9}
 #planSvg .edit-freehand{pointer-events:none}
+/* 2.7 gesture-guided rerouting */
+#planSvg .edit-intent-corridor{fill:none;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
+#planSvg .edit-preview-handle-hit{pointer-events:all;cursor:grab}
+#planSvg .edit-preview-handle{pointer-events:none}

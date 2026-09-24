@@ -1,4 +1,4 @@
-/* Warm 2.6.1: pure geometry -> cells -> regions -> patterns -> connectors -> H -> Q. */
+/* Warm 2.7.0: pure geometry -> cells -> regions -> patterns -> connectors -> H -> Q. */
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.WarmEngine=api;})(typeof globalThis!=='undefined'?globalThis:this,function(){
 'use strict';
 const EPS=1e-7;
@@ -237,6 +237,51 @@ function connector(a,b,space,boxes,occupied,n){
    const q=points[v],ek=Math.min(k,v)*N+Math.max(k,v);let valid=edgeCache.get(ek);
    if(valid===undefined){valid=space.covers(p,q)&&!boxes.some(r=>segmentHitsBox(p,q,r))&&!occupied.some(([c,d])=>segmentDistance(p,q,c,d)<gap-EPS);edgeCache.set(ek,valid);}if(!valid)continue;
    const len=distance(p,q),cost=costs[id]+len+(turn?R*3:0),next=v*5+d;
+   if(cost>=costs[next]-EPS)continue;costs[next]=cost;parents[next]=id;run[next]=turn?len:Math.min(2*R,run[id]+len);heap.push([cost+Math.abs(q.x-b.x)+Math.abs(q.y-b.y),next]);
+  }
+ }
+ if(finish<0)return null;const route=[];for(let id=finish;id>=0;id=parents[id])route.push(points[Math.floor(id/5)]);return clean(route.reverse());
+}
+
+function connectorGuided(a,b,space,boxes,occupied,n,guide=[],opts={}){
+ const gap=n.pipeDiameterMm*1.5,R=n.minBendRadiusMm;
+ const corridor=Math.max(40,Number(opts.corridorMm)||Math.max(n.pitch*.75,2.4*R,120));
+ const weight=Math.max(0,Number(opts.weight)||1.8),turnWeight=Math.max(1,Number(opts.turnWeight)||6),cw=Number(opts.centerWeight),centerWeight=Math.max(0,Number.isFinite(cw)?cw:.06);
+ occupied=occupied.filter(([p,q])=>!boxes.some(r=>inRect(p,r)&&inRect(q,r)));
+ let g=(guide||[]).filter(p=>p&&Number.isFinite(p.x)&&Number.isFinite(p.y)).map(p=>point(p.x,p.y));
+ if(g.length<2)return connector(a,b,space,boxes,occupied,n);
+ if(!same(g[0],a))g.unshift(point(a.x,a.y));if(!same(g.at(-1),b))g.push(point(b.x,b.y));
+ // Keep the broad gesture shape, not every finger sample. Coordinates from a
+ // small set of landmarks are added to the routing graph so the path can run
+ // through the middle of a room without becoming a pixel-by-pixel trace.
+ const minSample=Math.max(corridor*.32,35),compact=[g[0]];
+ for(let i=1;i<g.length-1;i++)if(distance(compact.at(-1),g[i])>=minSample)compact.push(g[i]);
+ if(!same(compact.at(-1),g.at(-1)))compact.push(g.at(-1));
+ if(compact.length>10){const sampled=[];for(let i=0;i<10;i++)sampled.push(compact[Math.round(i*(compact.length-1)/9)]);g=sampled;}else g=compact;
+ const guideDistance=p=>{let best=Infinity;for(let i=1;i<g.length;i++)best=Math.min(best,pointDistance(p,g[i-1],g[i]));return best;};
+ const all=space.rects;
+ const xs=unique([a.x,b.x,...all.flatMap(r=>[r.x,r.x+r.width]),...boxes.flatMap(r=>[r.x-gap,r.x+r.width+gap]),...occupied.flatMap(([p,q])=>[p.x-gap,p.x+gap,q.x-gap,q.x+gap]),...g.map(p=>p.x)]);
+ const ys=unique([a.y,b.y,...all.flatMap(r=>[r.y,r.y+r.height]),...boxes.flatMap(r=>[r.y-gap,r.y+r.height+gap]),...occupied.flatMap(([p,q])=>[p.y-gap,p.y+gap,q.y-gap,q.y+gap]),...g.map(p=>p.y)]);
+ const nx=xs.length,ny=ys.length,N=nx*ny;
+ if(N>180000)return connector(a,b,space,boxes,occupied,n);
+ const points=new Array(N),allowed=new Uint8Array(N),edgeCache=new Map();
+ for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){const p=point(xs[i],ys[j]),k=j*nx+i;points[k]=p;allowed[k]=space.contains(p)&&!boxes.some(r=>p.x>r.x-EPS&&p.x<r.x+r.width+EPS&&p.y>r.y-EPS&&p.y<r.y+r.height+EPS)&&!occupied.some(([c,d])=>pointDistance(p,c,d)<gap-EPS)?1:0;}
+ const start=ys.indexOf(a.y)*nx+xs.indexOf(a.x),end=ys.indexOf(b.y)*nx+xs.indexOf(b.x);
+ if(start<0||end<0||!allowed[start]||!allowed[end])return null;
+ const costs=new Float64Array(N*5).fill(Infinity),parents=new Int32Array(N*5).fill(-1),run=new Float64Array(N*5),heap=new Heap();
+ const initial=start*5+4;costs[initial]=0;run[initial]=Infinity;heap.push([distance(a,b),initial]);let finish=-1;
+ while(heap.a.length){const [priority,id]=heap.pop(),k=Math.floor(id/5),dir=id%5,p=points[k];if(priority>costs[id]+Math.abs(p.x-b.x)+Math.abs(p.y-b.y)+EPS)continue;if(k===end){finish=id;break;}
+  const i=k%nx,j=Math.floor(k/nx),options=[[i+1<nx?k+1:-1,0],[j+1<ny?k+nx:-1,1],[i?k-1:-1,2],[j?k-nx:-1,3]];
+  for(const [v,d] of options){if(v<0||!allowed[v]||(dir<4&&(d+2)%4===dir))continue;
+   const turn=dir<4&&d!==dir;if(turn&&run[id]<2*R-EPS)continue;
+   const q=points[v],ek=Math.min(k,v)*N+Math.max(k,v);let valid=edgeCache.get(ek);
+   if(valid===undefined){valid=space.covers(p,q)&&!boxes.some(r=>segmentHitsBox(p,q,r))&&!occupied.some(([c,d])=>segmentDistance(p,q,c,d)<gap-EPS);edgeCache.set(ek,valid);}if(!valid)continue;
+   const len=distance(p,q),mid=point((p.x+q.x)/2,(p.y+q.y)/2),gd=guideDistance(mid),ratio=gd/corridor,outside=Math.max(0,ratio-1);
+   // Almost no penalty inside the broad corridor; a rapidly increasing penalty
+   // outside it. This lets the router understand the gesture without copying
+   // hand jitter or inventing a turn for every small change of direction.
+   const guidePenalty=len*(centerWeight*Math.min(1,ratio)*Math.min(1,ratio)+weight*outside*outside);
+   const cost=costs[id]+len+guidePenalty+(turn?R*turnWeight:0),next=v*5+d;
    if(cost>=costs[next]-EPS)continue;costs[next]=cost;parents[next]=id;run[next]=turn?len:Math.min(2*R,run[id]+len);heap.push([cost+Math.abs(q.x-b.x)+Math.abs(q.y-b.y),next]);
   }
  }
@@ -484,7 +529,7 @@ function plan(input){
      selected.push(best);occupied.push(...segments(best.route));
     }
     if(failed)continue;
-    const p={ok:true,version:'2.6.1',planner:'unified-bcd',kind,axis,circuits:selected.sort((a,b)=>a.id-b.id),regions:rs,pathCover:groups.map(g=>g.ids),manifold:ports,totalLength:selected.reduce((s,c)=>s+c.length,0)};
+    const p={ok:true,version:'2.7.0',planner:'unified-bcd',kind,axis,circuits:selected.sort((a,b)=>a.id-b.id),regions:rs,pathCover:groups.map(g=>g.ids),manifold:ports,totalLength:selected.reduce((s,c)=>s+c.length,0)};
     p.hard=validate(n,p,space);if(!p.hard.ok)continue;p.quality=quality(n,p,space);p.coverage=p.quality.coverage;candidates.push(p);break;
    }
    }
@@ -496,5 +541,5 @@ function plan(input){
  candidates.sort((a,b)=>b.quality.score-a.quality.score||a.circuits.length-b.circuits.length||a.totalLength-b.totalLength);
  return candidates.length?{...candidates[0],candidatesChecked:candidates.length,elapsedMs:Date.now()-started}:{ok:false,error:'no-verified-layout',circuits:[],diagnostics,elapsedMs:Date.now()-started};
 }
-return {plan,validate,quality,normalize,freeSpace,decomposition,regions,rectangularCycle,coreVariants,clean,length,segments,intersect,segmentDistance,connector,manifoldPorts,bendsOK,attach,circuitRegions,groupVariants,rounded};
+return {plan,validate,quality,normalize,freeSpace,decomposition,regions,rectangularCycle,coreVariants,clean,length,segments,intersect,segmentDistance,connector,connectorGuided,manifoldPorts,bendsOK,attach,circuitRegions,groupVariants,rounded};
 });
