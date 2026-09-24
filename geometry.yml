@@ -1,0 +1,26 @@
+name: Geometry regression
+on: [push, pull_request]
+jobs:
+  routes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test tests/engine.test.cjs tests/editor-core.test.cjs
+  interface:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-save playwright@1.62.1
+      - run: npx playwright install --with-deps chromium
+      - run: node tests/mobile-editor.cjs
+      - run: node tests/notifications.cjs
+      - run: node tests/browser.cjs
+        env:
+          WARM_SMOKE: '1'

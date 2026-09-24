@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
+  <meta name="theme-color" content="#f8fafc" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <title>Тёплый пол — V2.6.1</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="stylesheet" href="styles-v120.css?v=2320" />
+  <link rel="stylesheet" href="styles-v24.css?v=2610">
+  <link rel="stylesheet" href="notifications.css?v=261-notices">
+  <link rel="stylesheet" href="mobile-editor.css?v=261-editor">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="home-topbar">
+      <div><div class="eyebrow">V2.6.1 · проверенный вариант</div><h1>Тёплый пол</h1></div>
+      <button id="newSchemeBtn" class="ghost-btn">Новая</button>
+    </header>
+
+    <main>
+      <section id="homeView" class="view active">
+        <div class="hero card">
+          <h2>Мои схемы</h2>
+          <p>Выберите готовую форму комнаты, растяните её пальцем и укажите коллектор.</p>
+          <button id="createFirstBtn" class="primary-btn">Добавить схему</button>
+        </div>
+        <div class="section-title-row"><h3>Сохранённые</h3><input id="searchInput" class="search" placeholder="Поиск" /></div>
+        <div id="schemesList" class="scheme-list"></div>
+      </section>
+
+      <section id="editorView" class="view editor-screen" aria-label="Полноэкранный редактор комнаты">
+        <header class="editor-bar">
+          <button id="backBtn" class="round-btn" aria-label="Назад">‹</button>
+          <div class="editor-heading">
+            <strong id="schemeTitle">Новая схема</strong>
+            <span id="gridInfo">4,00 × 3,00 м</span>
+          </div>
+          <div class="editor-bar-actions">
+            <button id="undoBtn" class="round-btn" aria-label="Отменить">↶</button>
+            <button id="fitBtn" class="round-btn" aria-label="Показать целиком">⌗</button>
+            <button id="rotateBtn" class="round-btn" aria-label="Повернуть на 90 градусов">↻</button>
+            <button id="settingsBtn" class="round-btn" aria-label="Настройки">⋯</button>
+          </div>
+          <div id="editActions" hidden>
+            <button id="editUndo" type="button" aria-label="Отменить">↶</button>
+            <button id="editRedo" type="button" aria-label="Повторить">↷</button>
+            <button id="editDone" type="button">Готово</button>
+          </div>
+        </header>
+
+        <div id="editorFeedback" class="editor-feedback" aria-label="Сообщения редактора">
+          <span id="feedbackMode" class="feedback-mode">План комнаты</span>
+          <span id="feedbackIcon" class="feedback-icon" aria-hidden="true" hidden></span>
+          <div id="status" class="status-toast" role="status" aria-live="polite" aria-atomic="true"></div>
+          <button id="feedbackDetails" class="feedback-button" type="button" aria-label="Подсказка и последнее сообщение" title="Подсказка и последнее сообщение">?</button>
+          <button id="feedbackDismiss" class="feedback-button" type="button" aria-label="Скрыть сообщение" hidden>×</button>
+        </div>
+
+        <div class="workspace">
+          <div id="diagramScroll" class="diagram-scroll">
+            <svg id="planSvg" class="plan-svg" xmlns="http://www.w3.org/2000/svg" aria-label="Схема тёплого пола"></svg>
+          </div>
+          <div id="modeHint" class="mode-toast" aria-hidden="true">Перетащите большие маркеры, чтобы изменить форму.</div>
+          <div class="zoom-fab">
+            <button id="zoomInBtn" class="round-btn mini" aria-label="Увеличить">+</button>
+            <button id="zoomOutBtn" class="round-btn mini" aria-label="Уменьшить">−</button>
+          </div>
+          <button id="variantSwitchBtnV221" type="button" class="variant-switch-v221" hidden>
+            <span>Вариант</span><strong id="variantSwitchLabelV221">Авто</strong><b>⌄</b>
+          </button>
+          <aside id="manualToolbarV2B" class="manual-toolbar-v2b" aria-label="Инструменты ручной правки">
+            <button id="manualToolMoveV2B" type="button" class="manual-side-btn active" title="Двигать проход"><b>↕</b><span>Двигать</span></button>
+            <button id="manualToolDrawV2B" type="button" class="manual-side-btn" title="Продолжить трубу"><b>✎</b><span>Труба</span></button>
+            <button id="manualToolEraseV2B" type="button" class="manual-side-btn danger" title="Вырезать участок"><b>⌫</b><span>Ластик</span></button>
+            <button id="manualToolLockV2B" type="button" class="manual-side-btn" title="Зафиксировать участок"><b>▣</b><span>Фикс.</span></button>
+            <button id="manualToolZoneV20" type="button" class="manual-side-btn" title="Заполнить зону по направлению жеста"><b>⇢</b><span>Зона</span></button>
+            <div class="manual-side-sep"></div>
+            <button id="manualBridgeV2B" type="button" class="manual-side-btn" title="Соединить с сохранённым хвостом"><b>↗</b><span>Мост</span></button>
+            <button id="manualRebuildV20" type="button" class="manual-side-btn" title="Перестроить выбранный участок или разрыв"><b>⌁</b><span>Перестр.</span></button>
+            <button id="manualRecalcUnlockedV20" type="button" class="manual-side-btn" title="Вернуть незакреплённые участки к расчётному варианту"><b>⟳</b><span>Остальное</span></button>
+            <button id="manualCompareSideV2B" type="button" class="manual-side-btn" title="Наложить авто-план"><b>◫</b><span>Сравн.</span></button>
+            <div class="manual-side-sep"></div>
+            <button id="manualUndoSideV2B" type="button" class="manual-side-btn" title="Отменить"><b>↶</b><span>Назад</span></button>
+            <button id="manualRedoSideV2B" type="button" class="manual-side-btn" title="Повторить"><b>↷</b><span>Вперёд</span></button>
+            <button id="manualDoneSideV2B" type="button" class="manual-side-btn done" title="Завершить правку"><b>✓</b><span>Готово</span></button>
+          </aside>
+        </div>
+
+        <section id="editInspector" hidden aria-label="Выбранный объект"></section>
+        <nav id="editDock" hidden aria-label="Инструменты правки">
+          <button type="button" data-edit-tool="select" aria-pressed="true"><b aria-hidden="true">↖</b>Выбрать</button>
+          <button type="button" data-edit-tool="draw" aria-pressed="false"><b aria-hidden="true">✎</b>Рисовать</button>
+          <button type="button" data-edit-tool="rebuild" aria-pressed="false"><b aria-hidden="true">⌁</b>Перестроить</button>
+          <button type="button" data-edit-tool="more" aria-pressed="false"><b aria-hidden="true">⋯</b>Ещё</button>
+        </nav>
+        <nav class="editor-dock" aria-label="Инструменты">
+          <button id="shapeToolBtn" class="dock-btn active"><span class="dock-icon">▱</span><span>Форма</span></button>
+          <button id="obstacleToolBtn" class="dock-btn"><span class="dock-icon">▧</span><span>Препятствие</span></button>
+          <button id="collectorToolBtn" class="dock-btn"><span class="dock-icon">●●</span><span>Коллектор</span></button>
+          <button id="generateBtn" class="dock-btn strong"><span class="dock-icon">∿</span><span>Авто</span></button>
+          <button id="manualToolBtn" class="dock-btn"><span class="dock-icon">✎</span><span>Правка</span></button>
+        </nav>
+
+        <div id="sheetBackdrop" class="sheet-backdrop"></div>
+
+        <section id="shapeSheet" class="bottom-sheet shape-sheet-v24" aria-label="Форма комнаты">
+          <div class="sheet-grabber"></div>
+          <div class="sheet-head"><div><strong>Форма комнаты</strong><span>Прямоугольник с независимыми вырезами по углам</span></div><button id="closeShapeV24" class="round-btn mini" type="button">×</button></div>
+          <div id="legacyShapeNoticeV24" class="legacy-shape-notice-v24 hidden">Эта старая свободная форма не сводится к угловым вырезам. Чтобы перейти на новый редактор, нажмите «Сбросить форму».</div>
+          <div class="shape-base-grid-v24">
+            <label>Ширина, м<input id="shapeWidthInput" type="number" value="4.00" min="0.5" max="30" step="0.01" inputmode="decimal"></label>
+            <label>Высота, м<input id="shapeHeightInput" type="number" value="3.00" min="0.5" max="30" step="0.01" inputmode="decimal"></label>
+            <button id="rotateShapeV24" type="button" class="secondary-btn shape-rotate-v24">↻ Повернуть</button>
+          </div>
+          <div class="corner-editor-v24">
+            <div class="corner-map-v24" aria-label="Выбор угла для выреза">
+              <div class="corner-room-v24"><span>помещение</span></div>
+              <button type="button" class="corner-pick-v24 tl" data-v24-corner="tl"><b>＋</b><span>Верхний левый</span></button>
+              <button type="button" class="corner-pick-v24 tr" data-v24-corner="tr"><b>＋</b><span>Верхний правый</span></button>
+              <button type="button" class="corner-pick-v24 br" data-v24-corner="br"><b>＋</b><span>Нижний правый</span></button>
+              <button type="button" class="corner-pick-v24 bl" data-v24-corner="bl"><b>＋</b><span>Нижний левый</span></button>
+            </div>
+            <div id="cornerCutPanelV24" class="corner-cut-panel-v24">
+              <div class="corner-cut-head-v24"><div><b id="cornerCutTitleV24">Выберите угол</b><small id="cornerCutStateV24">Здесь можно добавить прямоугольный вырез</small></div><button id="toggleCornerCutV24" type="button" class="secondary-btn">Добавить вырез</button></div>
+              <div id="cornerCutFieldsV24" class="corner-cut-fields-v24 hidden">
+                <label>Ширина выреза, м<input id="cornerCutWidthV24" type="number" min="0.10" max="30" step="0.01" inputmode="decimal"></label>
+                <label>Глубина выреза, м<input id="cornerCutDepthV24" type="number" min="0.10" max="30" step="0.01" inputmode="decimal"></label>
+              </div>
+              <div id="cornerCutErrorV24" class="corner-cut-error-v24 hidden"></div>
+            </div>
+          </div>
+          <div class="sheet-actions two shape-actions-v24"><button id="resetShapeBtn" type="button" class="secondary-btn">Сбросить форму</button><button id="doneShapeV24" type="button" class="primary-btn">Готово</button></div>
+        </section>
+
+        <section id="obstacleSheet" class="bottom-sheet" aria-label="Препятствия">
+          <div class="sheet-grabber"></div>
+          <div class="sheet-head"><div><strong>Препятствия</strong><span>Рисуйте, выбирайте и редактируйте прямо на плане</span></div><button data-close-sheet class="round-btn mini">×</button></div>
+          <button id="drawObstacleBtn" class="primary-btn wide">＋ Добавить препятствие</button>
+          <button id="clearObstaclesBtn" class="secondary-btn wide top-gap">Очистить препятствия</button>
+          <p class="sheet-help">Коснитесь препятствия, чтобы выбрать его. Тяните сам прямоугольник для перемещения, а синие углы — для изменения размера. Привязка — 1 см.</p>
+        </section>
+
+        <section id="collectorSheetV222" class="bottom-sheet collector-sheet-v222" aria-label="Настройки коллектора">
+          <div class="sheet-grabber"></div>
+          <div class="sheet-head"><div><strong>Коллектор</strong><span>Два выхода: подача и обратка</span></div><button data-close-sheet class="round-btn mini">×</button></div>
+          <div id="collectorPreviewV222" class="collector-preview-v222" aria-live="polite"></div>
+          <div class="collector-actions-v222">
+            <button id="swapCollectorPortsV222" type="button" class="collector-action-v222"><span class="collector-action-icon-v222">⇄</span><span><b>Поменять подачу и обратку</b><small>Назначить соседние выходы наоборот и пересчитать раскладку</small></span></button>
+            <button id="moveCollectorV222" type="button" class="collector-action-v222"><span class="collector-action-icon-v222">⌖</span><span><b>Перенести коллектор</b><small>Выбрать новое место на стене помещения</small></span></button>
+          </div>
+          <button id="openColdWallsFromCollectorV222" type="button" class="secondary-btn wide top-gap">❄ Холодные стены</button>
+          <p class="sheet-help">Красная точка — подача, синяя — обратка. Нажмите «Поменять подачу и обратку», чтобы переставить их местами, затем заново рассчитайте укладку.</p>
+        </section>
+
+        <section id="coldWallsSheetV222" class="bottom-sheet cold-walls-sheet-v222" aria-label="Холодные стены">
+          <div class="sheet-grabber"></div>
+          <div class="sheet-head"><div><strong>Холодные стены</strong><span>Выберите одну или две наружные стены</span></div><button data-close-sheet class="round-btn mini">×</button></div>
+          <div class="cold-wall-picker-v222">
+            <button type="button" class="cold-side-v222 top" data-cold-side-v222="top">Сверху</button>
+            <button type="button" class="cold-side-v222 right" data-cold-side-v222="right">Справа</button>
+            <div class="cold-room-mini-v222"><span>помещение</span><b id="coldWallCountV222">0 / 2</b></div>
+            <button type="button" class="cold-side-v222 bottom" data-cold-side-v222="bottom">Снизу</button>
+            <button type="button" class="cold-side-v222 left" data-cold-side-v222="left">Слева</button>
+          </div>
+          <div class="settings-grid cold-settings-v222">
+            <label>Ширина краевой зоны, м<input id="coldBandWidthInputV222" type="number" value="0.80" min="0.10" max="3.00" step="0.05" inputmode="decimal"></label>
+            <label>Шаг у холодных стен, м<input id="coldStepInputV222" type="number" value="0.10" min="0.05" max="0.50" step="0.01" inputmode="decimal"></label>
+          </div>
+          <div id="coldWallHintV222" class="cold-wall-hint-v222">Холодные стены не выбраны.</div>
+          <div class="sheet-actions two">
+            <button id="clearColdWallsV222" type="button" class="secondary-btn">Сбросить</button>
+            <button id="applyColdWallsV222" type="button" class="primary-btn">Применить</button>
+          </div>
+          <p class="sheet-help">Для двух противоположных стен локальный шаг применяется с обеих сторон. Для двух соседних стен Auto сравнивает направления и выбирает лучший компромисс; сложные формы дополнительно может обработать адаптивный режим.</p>
+        </section>
+
+        <section id="dimensionSheet" class="bottom-sheet dimension-sheet" aria-label="Точный размер">
+          <div class="sheet-grabber"></div>
+          <div class="sheet-head"><div><strong id="dimensionTitle">Точный размер</strong><span>Можно вводить с точностью до 0,01 м</span></div><button data-close-sheet class="round-btn mini">×</button></div>
+          <label class="dimension-input-label"><span id="dimensionLabel">Размер, м</span><input id="dimensionInput" type="number" min="0.20" max="30" step="0.01" inputmode="decimal"></label>
+          <button id="applyDimensionBtn" class="primary-btn wide top-gap">Применить</button>
+        </section>
+
+
+
+        <section id="zoneSheet" class="bottom-sheet zone-sheet" aria-label="Разбиение помещения на зоны">
+          <div class="sheet-grabber"></div>
+          <div class="sheet-head"><div><strong>Разбиение на зоны</strong><span>Сначала проверьте, как приложение поняло сложную комнату</span></div><button data-close-sheet class="round-btn mini">×</button></div>
+          <div class="zone-axis-row" role="group" aria-label="Направление разбиения">
+            <button type="button" class="chip active" data-zone-axis="auto">Авто</button>
+            <button type="button" class="chip" data-zone-axis="horizontal">Горизонтально</button>
+            <button type="button" class="chip" data-zone-axis="vertical">Вертикально</button>
+          </div>
+          <div id="zoneEditorSummary" class="zone-editor-summary">Анализируем свободную площадь…</div>
+          <div id="zoneEditorList" class="zone-editor-list"></div>
+          <div class="sheet-actions two">
+            <button id="confirmZonesBtn" type="button" class="primary-btn">Построить по зонам</button>
+            <button id="reanalyzeZonesBtn" type="button" class="secondary-btn">Пересчитать</button>
+          </div>
+          <p class="sheet-help">Цвета и номера показывают будущий порядок прохождения. Зоны можно переставлять, объединять с соседней и снова разделять. Способ укладки сохраняется отдельно для каждой зоны.</p>
+        </section>
+
+        <section id="layoutChooserSheetV221" class="bottom-sheet layout-chooser-v221" aria-label="Способ укладки">
+          <div class="sheet-grabber"></div>
+          <div class="sheet-head"><div><strong>Как уложить трубу?</strong><span>Можно доверить выбор Warm или указать рисунок вручную</span></div><button data-close-sheet class="round-btn mini">×</button></div>
+          <div class="layout-choice-grid-v221" role="group" aria-label="Способ укладки">
+            <button type="button" class="layout-choice-v221 active" data-layout-choice-v221="auto"><span class="layout-mini-v232" data-preview-v232="auto" aria-hidden="true"></span><span><b>Авто</b><small>Сравнить три схемы и комбинированный режим</small></span><em>Рекомендуется</em></button>
+            <div class="layout-group-v232">Основные схемы</div>
+            <button type="button" class="layout-choice-v221" data-layout-choice-v221="snake"><span class="layout-mini-v232" data-preview-v232="snake" aria-hidden="true"></span><span><b>Змейка</b><small>Последовательные параллельные проходы</small></span></button>
+            <button type="button" class="layout-choice-v221" data-layout-choice-v221="double-snake"><span class="layout-mini-v232" data-preview-v232="double-snake" aria-hidden="true"></span><span><b>Двойная змейка</b><small>Подача и обратка идут рядом навстречу по всей площади</small></span></button>
+            <button type="button" class="layout-choice-v221" data-layout-choice-v221="spiral"><span class="layout-mini-v232" data-preview-v232="spiral" aria-hidden="true"></span><span><b>Улитка</b><small>Встречные ветви между витками спирали</small></span></button>
+            <div class="layout-group-v232">По зонам</div>
+            <button type="button" class="layout-choice-v221" data-layout-choice-v221="adaptive"><span class="layout-mini-v232" data-preview-v232="adaptive" aria-hidden="true"></span><span><b>Комбинированный</b><small>Сочетание локальных рисунков и направлений по зонам</small></span></button>
+          </div>
+          <div id="layoutDirectionBlockV221" class="layout-subchoice-v221 hidden">
+            <strong>Направление рядов</strong>
+            <div class="layout-segmented-v221">
+              <button type="button" class="active" data-layout-direction-v221="auto"><span class="dir-icon-v221">✦</span>Авто</button>
+              <button type="button" data-layout-direction-v221="along"><span class="dir-icon-v221">══</span>Вдоль длинной стороны</button>
+              <button type="button" data-layout-direction-v221="across"><span class="dir-icon-v221 rotate">══</span>Поперёк</button>
+            </div>
+          </div>
+          <div id="layoutTurnBlockV221" class="layout-subchoice-v221 hidden">
+            <strong>Направление улитки</strong>
+            <div class="layout-segmented-v221 three">
+              <button type="button" class="active" data-layout-turn-v221="auto">Авто</button>
+              <button type="button" data-layout-turn-v221="cw">↻ По часовой</button>
+              <button type="button" data-layout-turn-v221="ccw">↺ Против</button>
+            </div>
+          </div>
+          <div class="layout-calc-summary-v221" id="layoutCalcSummaryV221"></div>
+          <button id="calculateLayoutV221" type="button" class="primary-btn wide">Рассчитать</button>
+          <p class="sheet-help">Точку начала и подводку к коллектору Warm подбирает автоматически. После расчёта можно мгновенно переключиться на другой рисунок.</p>
+        </section>
+
+        <section id="routeSheet" class="bottom-sheet route-sheet" aria-label="Варианты укладки трубы">
+          <div class="sheet-grabber"></div>
+          <div class="sheet-head"><div><strong>Другой вариант</strong><span id="routeSheetSubtitle">Выберите рисунок — схема изменится сразу</span></div><button data-close-sheet class="round-btn mini">×</button></div>
+          <div id="routeCandidates" class="route-candidates"></div>
+          <p id="routeSheetHelp" class="sheet-help">Приложение само проверяет повороты и, где возможно, расширяет тесные развороты. Технические параметры спрятаны — здесь остаются рисунок, длина и понятный статус.</p>
+        </section>
+
+
+        <section id="manualSheetV2" class="bottom-sheet manual-sheet-v2" aria-label="Ручная правка трубы">
+          <div class="sheet-grabber"></div>
+          <div class="sheet-head"><div><strong>Ручная правка · V2.0</strong><span>Автоматический и ручной варианты хранятся независимо</span></div><button data-close-sheet class="round-btn mini">×</button></div>
+          <div class="manual-view-tabs-v2" role="group" aria-label="Сравнение вариантов">
+            <button id="manualViewAutoV2" type="button" class="chip">Авто</button>
+            <button id="manualViewManualV2" type="button" class="chip active">Ручной</button>
+            <button id="manualViewOverlayV2" type="button" class="chip">Наложить</button>
+          </div>
+          <div id="manualSummaryV2" class="manual-summary-v2">Выберите способ правки.</div>
+          <div id="manualCompareDetailsV20" class="manual-compare-details-v20"></div>
+          <div class="manual-mode-grid-v2 manual-mode-grid-v20">
+            <button id="manualEditModeV2" type="button" class="manual-mode-btn-v2 active"><b>↕</b><span>Выбрать и двигать</span></button>
+            <button id="manualDrawModeV2" type="button" class="manual-mode-btn-v2"><b>✎</b><span>Рисовать</span></button>
+            <button id="manualZoneModeV20" type="button" class="manual-mode-btn-v2"><b>⇢</b><span>Заполнить зону</span></button>
+          </div>
+          <button id="manualPairedReturnV23" type="button" class="paired-return-toggle-v23" aria-pressed="false"><span class="paired-return-icon-v23">↺</span><span><b>Парная обратка</b><small>Рисуйте путь подачи внутрь — Warm сразу проложит возврат рядом с шагом трубы. Удобно для ручной улитки.</small></span><i class="paired-return-switch-v23"></i></button>
+          <div id="manualSelectionV2" class="manual-selection-v2">Коснитесь нужной прямой трубы — Warm подсветит ближайший проход. Затем тяните его поперёк. Для выбора используется увеличенная зона касания.</div>
+          <div class="manual-action-grid-v2">
+            <button id="manualUndoV2" type="button" class="secondary-btn">↶ Назад</button>
+            <button id="manualRedoV2" type="button" class="secondary-btn">↷ Вперёд</button>
+            <button id="manualFinishCircuitV2" type="button" class="secondary-btn">К обратке</button>
+            <button id="manualNewCircuitV2" type="button" class="secondary-btn">＋ Контур</button>
+            <button id="manualDeleteLastV2" type="button" class="secondary-btn">Удалить последний</button>
+            <button id="manualValidateV2" type="button" class="secondary-btn">Проверить</button>
+            <button id="manualRebuildSheetV20" type="button" class="secondary-btn">Перестроить A→B</button>
+            <button id="manualRecalcSheetV20" type="button" class="secondary-btn">Пересчитать остальное</button>
+          </div>
+          <div class="sheet-actions two">
+            <button id="manualResetAutoV2" type="button" class="secondary-btn">Сбросить к авто</button>
+            <button id="manualStartBlankV2" type="button" class="secondary-btn">Начать с нуля</button>
+          </div>
+          <button id="manualDoneV2" type="button" class="primary-btn wide top-gap">Готово</button>
+          <p class="sheet-help"><strong>V2.3:</strong> «Парная обратка» автоматически возвращает трубу рядом с нарисованным ходом. «Труба» понимает направление жеста и защёлкивает проходы на шаг. «Зона» — проведите жест внутри свободной области в желаемом направлении; Warm заполнит подходящую локальную область. После «Ластика» синий конец остаётся активным, оранжевый — целью. «Перестроить A→B» сравнивает несколько обходов, а «Пересчитать остальное» сохраняет зафиксированные проходы и возвращает совместимые незакреплённые точки к Auto.</p>
+        </section>
+
+        <section id="settingsSheet" class="bottom-sheet settings-sheet" aria-label="Настройки схемы">
+          <div class="sheet-grabber"></div>
+          <div class="sheet-head"><div><strong>Параметры</strong><span>Точные значения можно поправить здесь</span></div><button data-close-sheet class="round-btn mini">×</button></div>
+          <div class="settings-grid">
+            <label>Диаметр трубы, мм<input id="pipeDiameterInput" type="number" value="16" min="8" max="32" step="1" inputmode="numeric"></label>
+            <label>Шаг трубы, м<input id="pipeStepInput" type="number" value="0.15" min="0.05" max="0.50" step="0.01" inputmode="decimal"></label>
+            <label>Отступ оси от стены, м<input id="wallOffsetInput" type="number" value="0.10" min="0" max="1" step="0.01" inputmode="decimal"></label>
+            <label>Радиус изгиба<select id="bendRadiusModeInput"><option value="auto">Авто (5×Ø)</option><option value="manual">Вручную</option></select></label>
+            <label>Мин. радиус, мм<input id="minBendRadiusInput" type="number" value="80" min="20" max="500" step="1" inputmode="numeric"></label>
+            <label>Макс. длина контура, м<input id="maxCircuitLengthInput" type="number" value="100" min="20" max="300" step="1" inputmode="numeric"></label>
+            <label>Схема укладки<select id="layoutSchemeInput">
+              <option value="auto">Авто — лучший вариант</option>
+              <option value="spiral">Улитка</option>
+              <option value="double-snake">Двойная змейка</option>
+              <option value="snake">Змейка</option>
+              <option value="adaptive">Комбинированный</option>
+            </select></label>
+            <label>Направление проходов<select id="layoutOrientationInput">
+              <option value="auto">Авто</option>
+              <option value="along">Вдоль помещения</option>
+              <option value="across">Поперёк помещения</option>
+            </select></label>
+            <label>Начало рисунка<select id="layoutEntryInput">
+              <option value="auto">Авто</option>
+              <option value="near">Ближайший край</option>
+              <option value="far">Дальний край</option>
+            </select></label>
+            <label>Направление улитки<select id="layoutTurnInput">
+              <option value="auto">Авто</option>
+              <option value="cw">По часовой</option>
+              <option value="ccw">Против часовой</option>
+            </select></label>
+            <label>Шаг крепления, м<input id="fastenerStepInput" type="number" value="0.50" min="0.10" max="1.50" step="0.05" inputmode="decimal"></label>
+            <label>Крепёж на чертеже<select id="showFastenersInput"><option value="yes">Показывать</option><option value="no">Скрыть</option></select></label>
+            <button id="coldWallsSettingsBtnV222" type="button" class="settings-action-card-v222 full"><span class="settings-action-icon-v222">❄</span><span><b>Холодные стены</b><small id="coldWallsSettingsSummaryV222">Не выбраны</small></span><strong>›</strong></button>
+            <div class="compat-hidden" aria-hidden="true">
+              <label>Холодная стена<select id="coldWallInput"><option value="none">Не задана</option><option value="top">Сверху</option><option value="right">Справа</option><option value="bottom">Снизу</option><option value="left">Слева</option></select></label>
+              <label>Ширина холодной зоны, м<input id="coldBandWidthInput" type="number" value="0.80" min="0.10" max="3.00" step="0.05" inputmode="decimal"></label>
+              <label>Шаг в холодной зоне, м<input id="coldStepInput" type="number" value="0.10" min="0.05" max="0.50" step="0.01" inputmode="decimal"></label>
+            </div>
+            <div id="coldWallInfoV21" class="cold-wall-info-v21 full">Холодная зона выключена.</div>
+            <label>Монтажная сетка, м<input id="gridStepInput" type="number" value="0.05" min="0.02" max="0.50" step="0.01" inputmode="decimal"></label>
+            <label>Отображение трубы<select id="pipeRenderModeInput"><option value="scale">В масштабе</option><option value="scheme">Схема</option></select></label>
+            <div id="circuitSizingInfoV21" class="circuit-sizing-info-v21 full">Авторазбиение по длине: расчёт после задания помещения.</div>
+            <div id="pipeGeometryInfo" class="pipe-geometry-info">Ø16 мм · шаг 150 мм · зазор 134 мм · Rmin 80 мм</div><div id="physicalStatusInfo" class="physical-status-info">Проверка выполняется после построения маршрута.</div>
+            <label>Название<input id="nameInput" type="text" placeholder="Кухня"></label>
+            <label class="full">Объект<input id="objectInput" type="text" placeholder="Дом — 1 этаж"></label>
+          </div>
+          <div class="sheet-actions two"><button id="saveBtn" class="primary-btn">Сохранить</button><button id="shareBtn" class="secondary-btn">Экспорт PNG</button></div>
+          <div class="route-summary"><span id="routeInfo">Маршрут не построен</span></div>
+        </section>
+
+        <!-- Совместимость с логикой предыдущей версии; элементы не участвуют в основном интерфейсе. -->
+        <div class="compat-hidden" aria-hidden="true">
+          <span id="baseSizeLabel"></span><span id="shapeEditsInfo"></span>
+          <button id="toggleBaseEditBtn"></button><div id="baseEditPanel"></div>
+          <input id="widthInput" value="4"><input id="heightInput" value="3"><button id="resizeBtn"></button>
+        </div>
+      </section>
+    </main>
+  </div>
+  <dialog id="feedbackDialog" class="feedback-dialog" aria-labelledby="feedbackDialogTitle">
+    <div class="feedback-dialog-head"><strong id="feedbackDialogTitle">Сообщение</strong><button id="feedbackDialogClose" class="feedback-button" type="button" aria-label="Закрыть сообщение" autofocus>×</button></div>
+    <p id="feedbackDialogText"></p>
+  </dialog>
+  <script src="engine-core-v120.js?v=2610"></script>
+  <script src="app-v120.js?v=2610"></script>
+  <script src="layout-patterns-v232.js?v=2610"></script>
+  <script src="app-v232.js?v=2610"></script>
+  <script src="shape-v24.js?v=2610"></script>
+  <script src="app-v24.js?v=261-editor"></script>
+  <script src="engine-unified.js?v=261-unified"></script>
+  <script src="app-v260.js?v=261-notices"></script>
+  <script src="notifications.js?v=261-notices"></script>
+  <script src="editor-core.js?v=261-editor"></script>
+  <script src="mobile-editor.js?v=261-editor"></script>
+</body>
+</html>

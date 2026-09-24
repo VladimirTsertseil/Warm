@@ -1,0 +1,126 @@
+/* Pure editing operations. WarmEngine.validate is the only acceptance gate. */
+(function(root,factory){if(typeof module==='object'&&module.exports)module.exports=factory(require('./engine-unified.js'));else root.WarmEditorCore=factory(root.WarmEngine);})(globalThis,function(E){
+'use strict';
+const copy=v=>structuredClone(v),dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y),same=(a,b)=>dist(a,b)<1e-6;
+const labels={H1_freeSpace:'Труба за границей отступа',H2_obstacles:'Труба в препятствии',H3_crossings:'Пересечение или касание труб',H4_bendRadius:'Слишком тесный поворот',H5_continuity:'Подключите подачу и обратку',H6_circuitLimit:'Превышена длина контура',H7_movementJoints:'Пересечение шва без защиты'};
+function projection(p,a,b){const dx=b.x-a.x,dy=b.y-a.y,t=Math.max(0,Math.min(1,((p.x-a.x)*dx+(p.y-a.y)*dy)/(dx*dx+dy*dy||1)));return{x:a.x+t*dx,y:a.y+t*dy};}
+function edgeKey(a,b){return [a,b].map(p=>`${p.x},${p.y}`).sort().join('|');}
+function locksPreserved(plan,locks=[]){return locks.every(l=>{const c=plan.circuits.find(c=>c.id===l.circuit);return c&&E.segments(c.route).some(([a,b])=>edgeKey(a,b)===l.edge);});}
+function updated(plan,ci,route){const p=copy(plan),c=p.circuits[ci];c.route=copy(route);c.length=E.length(route);c.core=copy(route);c.coreLength=c.length;p.totalLength=p.circuits.reduce((s,c)=>s+E.length(c.route),0);p.manual=true;return p;}
+function nearest(plan,p,tolerance){const hits=[];plan.circuits.forEach((c,ci)=>E.segments(c.route).forEach(([a,b],seg)=>{const at=projection(p,a,b),distance=dist(p,at);if(distance<=tolerance)hits.push({circuit:ci,seg,at,distance});}));return hits.sort((a,b)=>a.distance-b.distance||a.circuit-b.circuit||a.seg-b.seg);}
+function moveSegment(plan,selection,delta,locks=[]){
+ const {circuit:ci,seg}=selection,c=plan.circuits[ci],r=copy(c.route),a=r[seg],b=r[seg+1];
+ if(!a||!b||seg===0||seg>=r.length-2)return{ok:false,message:'Подключения перемещаются вместе с коллектором'};
+ const horizontal=Math.abs(a.y-b.y)<1e-6,vertical=Math.abs(a.x-b.x)<1e-6;
+ if(!horizontal&&!vertical)return{ok:false,message:'Выберите прямой участок трубы'};
+ if(!Number.isFinite(delta))return{ok:false,message:'Введите расстояние в миллиметрах'};
+ const axis=horizontal?'y':'x';a[axis]+=delta;b[axis]+=delta;
+ const p=updated(plan,ci,r);if(!locksPreserved(p,locks))return{ok:false,message:'Участок закреплён'};
+ return{ok:true,plan:p};
+}
+function replace(plan,ci,start,end,path,locks=[]){
+ const r=plan.circuits[ci]?.route;if(!r||start<0||end>=r.length||start>=end||!path?.length||!same(path[0],r[start])||!same(path.at(-1),r[end]))return{ok:false,message:'Отметьте две разные точки одного контура'};
+ const p=updated(plan,ci,[...r.slice(0,start),...E.clean(path),...r.slice(end+1)]);
+ if(!locksPreserved(p,locks))return{ok:false,message:'В выбранном участке есть закреплённая труба'};
+ return{ok:true,plan:p};
+}
+function inspect(input,plan){
+ let hard,n,space;try{n=E.normalize(input);space=E.freeSpace(n);hard=E.validate(input,plan,space);}catch{return{ok:false,checks:{H5_continuity:false},issues:[{key:'H5_continuity',message:'Укажите коллектор на стене',circuit:0,segments:[]}]};}
+ const issues=[];
+ if(hard.ok)return{...hard,issues};
+ for(const [key,ok] of Object.entries(hard.checks)){
+  if(ok)continue;
+  let located=false;
+  plan.circuits.forEach((c,ci)=>{
+   const r=c.route,ss=E.segments(r),bad=new Set();
+   const single=E.validate(input,{circuits:[c],manifold:plan.manifold?.length?plan.manifold:Array(plan.circuits.length).fill({})},space);
+   if(key==='H3_crossings'){
+    ss.forEach(([a,b],i)=>plan.circuits.forEach((other,cj)=>E.segments(other.route).forEach(([u,v],j)=>{if(ci===cj&&Math.abs(i-j)<2)return;if(E.intersect(a,b,u,v))bad.add(i);}))); 
+   }else if(!single.checks[key]){
+    if(key==='H1_freeSpace'||key==='H2_obstacles')ss.forEach(([a,b],i)=>{if(i>0&&i<ss.length-1&&!space.covers(a,b))bad.add(i);});
+    else if(key==='H4_bendRadius'){
+     const trim=r.map((p,i)=>{if(!i||i===r.length-1)return 0;const a=r[i-1],b=r[i+1],u=dist(a,p),v=dist(p,b),cos=((p.x-a.x)*(b.x-p.x)+(p.y-a.y)*(b.y-p.y))/(u*v||1);return n.minBendRadiusMm*Math.tan(Math.acos(Math.max(-1,Math.min(1,cos)))/2);});
+     ss.forEach(([a,b],i)=>{if(dist(a,b)+1e-6<trim[i]+trim[i+1])bad.add(i);});
+    }else if(key==='H5_continuity'){if(!c.supply||!same(r[0],c.supply))bad.add(0);if(!c.returnPoint||!same(r.at(-1),c.returnPoint))bad.add(ss.length-1);}
+    if(!bad.size)ss.forEach((_,i)=>bad.add(i));
+   }
+   if(bad.size){issues.push({key,message:labels[key],circuit:ci,segments:[...bad]});located=true;}
+  });
+  // Arc proximity between circuits can fail even without polyline crossings.
+  // Mark both complete circuits rather than inventing a point of collision.
+  if(!located)plan.circuits.forEach((c,ci)=>issues.push({key,message:labels[key],circuit:ci,segments:E.segments(c.route).map((_,i)=>i)}));
+  if(!plan.circuits.length)issues.push({key,message:'Нарисуйте или рассчитайте контур',circuit:0,segments:[]});
+ }
+ return{...hard,issues};
+}
+function bypass(input,plan,ci,start,end,locks=[]){
+ const r=plan.circuits[ci]?.route;if(!r||start>=end)return{ok:false,message:'Отметьте начало и конец участка'};
+ const n=E.normalize(input),space=E.freeSpace(n),a=r[start],b=r[end],occupied=[];
+ plan.circuits.forEach((c,cj)=>E.segments(c.route).forEach(([u,v],i)=>{
+  if(cj===ci&&i>=start&&i<end)return;
+  // Reserve the unchanged route. Only the small joint at each endpoint is
+  // opened for connection; the full assembled route is still hard-validated.
+  let p={...u},q={...v};const gap=n.pipeDiameterMm*1.5+1;
+  if(cj===ci&&i===start-1){const d=dist(p,q);if(d<=gap)return;q={x:q.x+(p.x-q.x)*gap/d,y:q.y+(p.y-q.y)*gap/d};}
+  if(cj===ci&&i===end){const d=dist(p,q);if(d<=gap)return;p={x:p.x+(q.x-p.x)*gap/d,y:p.y+(q.y-p.y)*gap/d};}
+  occupied.push([p,q]);
+ }));
+ const candidates=[];
+ // Preserve tangent directions where possible, then try the unrestricted
+ // connection. All candidates use the same obstacle-aware visibility search.
+ for(const stem of [n.minBendRadiusMm*2,0]){
+  const pre=start?r[start-1]:null,post=r[end+1];
+  const advance=(p,q,d)=>{const len=dist(p,q);return{x:p.x+(p.x-q.x)*d/len,y:p.y+(p.y-q.y)*d/len};};
+  const aa=stem&&pre?advance(a,pre,stem):a,bb=stem&&post?advance(b,post,stem):b;
+  const path=E.connector(aa,bb,space,[],occupied,n);if(!path)continue;
+  const result=replace(plan,ci,start,end,E.clean([a,...path,b]),locks);
+  if(result.ok&&E.validate(input,result.plan).ok)candidates.push({...result,path:E.clean([a,...path,b])});
+ }
+ candidates.sort((a,b)=>E.length(a.path)-E.length(b.path));
+ return candidates[0]||{ok:false,message:'Для этого участка свободного обхода нет. Выберите точки дальше от препятствия.'};
+}
+function boundaries(sections){
+ const raw=E.freeSpace({sections,obstacles:[],wallOffsetMm:0,pipeDiameterMm:0}),out=[];
+ for(const edge of raw.edges){const h=edge[0].y===edge[1].y,axis=h?'x':'y',fixed=h?'y':'x';let found=out.find(e=>e[0][fixed]===edge[0][fixed]&&e[1][fixed]===edge[1][fixed]&&e[1][axis]===edge[0][axis]);if(found)found[1]=edge[1];else out.push(copy(edge));}
+ return out;
+}
+function reconnect(input,plan,locks=[]){
+ const n=E.normalize(input),space=E.freeSpace(n),count=plan.circuits.length;
+ if(!count)return{ok:false,message:'Сначала нарисуйте или рассчитайте контур'};
+ const gap=n.pipeDiameterMm*1.5+1;
+ const trimmed=(a,b,atStart,atEnd)=>{const d=dist(a,b);if(d<gap*((atStart?1:0)+(atEnd?1:0)))return null;return[{x:a.x+(b.x-a.x)*(atStart?gap/d:0),y:a.y+(b.y-a.y)*(atStart?gap/d:0)},{x:b.x+(a.x-b.x)*(atEnd?gap/d:0),y:b.y+(a.y-b.y)*(atEnd?gap/d:0)}];};
+ for(const laneOrder of [1,-1]){
+  const ports=E.manifoldPorts(n,count,space,laneOrder);if(!ports)continue;
+  const next=copy(plan);let failed=false;
+  for(let ci=0;ci<count;ci++){
+   const old=plan.circuits[ci],r=old.route,p=ports[ci];let found=null;
+   const other=next.circuits.flatMap((c,i)=>i===ci?[]:E.segments(c.route));
+   for(const cut of [1,2,3,4]){if(found)break;for(const back of [1,2,3,4]){
+    const end=r.length-1-back;if(cut>=end)continue;
+    const core=r.slice(cut,end+1),occupied=E.segments(core).map(([a,b],i,ss)=>trimmed(a,b,i===0,i===ss.length-1)).filter(Boolean);
+    const head=E.connector(p.innerSupply,core[0],space,[],[...other,...occupied,[p.returnPoint,p.innerReturn]],n);if(!head)continue;
+    const tail=E.connector(core.at(-1),p.innerReturn,space,[],[...other,...occupied,...E.segments([p.supply,...head])],n);if(!tail)continue;
+    // Preserve the untouched middle, including collinear points used by locks.
+    const route=[p.supply,...head.slice(0,-1),...core,...tail.slice(1),p.returnPoint].filter((v,i,a)=>!i||!same(a[i-1],v));
+    const c={...copy(old),route,supply:p.supply,returnPoint:p.returnPoint,length:E.length(route),bendRadiusMm:n.minBendRadiusMm};
+    if(!E.validate(input,{circuits:[c],manifold:ports}).ok)continue;
+    const candidate=copy(next);candidate.circuits[ci]=c;if(!locksPreserved(candidate,locks))continue;
+    found=c;break;
+   }}
+   if(!found){failed=true;break;}next.circuits[ci]=found;
+  }
+  next.manifold=ports;next.totalLength=next.circuits.reduce((s,c)=>s+E.length(c.route),0);
+  if(!failed&&E.validate(input,next).ok)return{ok:true,plan:next};
+ }
+ return{ok:false,message:'Свободный подвод к коллектору не найден. Попробуйте другое положение.'};
+}
+function resizeWall(sections,edge,length){
+ const axis=edge[0].y===edge[1].y?'x':'y',dim=axis==='x'?'width':'height',lo=Math.min(edge[0][axis],edge[1][axis]),hi=Math.max(edge[0][axis],edge[1][axis]),old=hi-lo;
+ if(!Number.isFinite(length)||length<100||length>30000||!old)throw new Error('Длина стены — от 100 до 30 000 мм');
+ const map=v=>v<=lo?v:v>=hi?v+length-old:lo+(v-lo)*length/old;
+ const result=sections.map(r=>({...r,[axis]:map(r[axis]),[dim]:map(r[axis]+r[dim])-map(r[axis])}));
+ if(result.some(r=>r.width<50||r.height<50))throw new Error('Этот размер делает часть комнаты слишком узкой');
+ return result;
+}
+return{copy,dist,same,projection,edgeKey,locksPreserved,updated,nearest,moveSegment,replace,inspect,bypass,reconnect,boundaries,resizeWall,labels};
+});

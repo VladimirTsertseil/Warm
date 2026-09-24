@@ -1,0 +1,50 @@
+/* The canvas and its properties occupy separate rows, including on phones. */
+[hidden]{display:none!important}
+.editor-dock .dock-btn{font-size:12px;min-height:48px}
+.editor-heading span{font-size:12px}
+.editor-bar .round-btn{min-width:44px;min-height:44px}
+body.mobile-editor-active .editor-bar{height:calc(58px + env(safe-area-inset-top));padding-top:calc(5px + env(safe-area-inset-top))}
+body.mobile-editor-active .editor-bar-actions,body.mobile-editor-active #backBtn,body.mobile-editor-active .editor-dock,body.mobile-editor-active #manualToolbarV2B{display:none!important}
+body.mobile-editor-active .editor-heading{text-align:left}
+body.mobile-editor-active #gridInfo{font-size:12px}
+#editActions{display:flex;gap:5px;align-items:center}
+#editActions button,#editInspector button,#editDock button{min-height:44px;border:1px solid #d4dce5;border-radius:12px;background:#fff;color:#1e293b;font:600 14px system-ui;cursor:pointer;padding:8px 12px}
+#editActions button{min-width:44px;padding:6px 10px}
+#editActions #editDone,#editInspector .edit-primary{background:#1e40af;color:white;border-color:#1e40af}
+#editActions button:disabled,#editInspector button:disabled{opacity:.42;cursor:default}
+body.mobile-editor-active .diagram-scroll{overflow:hidden;padding:0!important;touch-action:none}
+body.mobile-editor-active #planSvg{width:100%!important;height:100%!important;max-width:none;touch-action:none;margin:0;background:#edf1f5;user-select:none}
+body.mobile-editor-active .zoom-fab{bottom:12px;right:10px;gap:5px}
+body.mobile-editor-active .zoom-fab .round-btn{width:44px;height:44px}
+#editInspector{flex:0 0 auto;background:#fff;border-top:1px solid #dce3eb;padding:8px 12px;max-height:38dvh;overflow:auto;overscroll-behavior:contain;font-size:14px;line-height:1.4;z-index:8}
+#editInspector p{margin:0;color:#536177;font-size:13px}
+.edit-context-head{display:flex;align-items:center;gap:8px;justify-content:space-between;min-height:28px}
+.edit-context-head strong{font-size:14px}
+.edit-context-head button{flex:none;padding:2px 10px!important}
+.edit-row{display:flex;align-items:center;gap:7px;margin-top:6px;flex-wrap:wrap}
+.edit-row button{flex:1;white-space:nowrap}
+.edit-row .edit-cycle{flex:0 0 44px;min-width:44px;padding:4px!important}
+.edit-fields{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.edit-fields label{font-size:13px;color:#475569;display:flex;flex-direction:column;gap:4px}
+.edit-fields input{width:100%;min-width:0;min-height:44px;font-size:16px;border:1px solid #cbd5e1;border-radius:10px;padding:8px;color:#0f172a;background:#fff}
+.edit-fields .edit-full{grid-column:1/-1}
+.edit-error{color:#b91c1c!important}
+#editDock{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;background:#f8fafc;border-top:1px solid #dce3eb;padding:5px 7px calc(5px + env(safe-area-inset-bottom));flex:none}
+#editDock button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:0;background:transparent;font-size:12px;padding:4px 2px;min-height:56px}
+#editDock button b{font-size:20px;line-height:1.1}
+#editDock button[aria-pressed=true]{background:#dbeafe;color:#1e40af}
+.edit-magnifier{position:absolute;width:142px;height:142px;border:3px solid #fff;border-radius:50%;box-shadow:0 3px 20px #0f172a55;overflow:hidden;pointer-events:none;z-index:9;background:#f8fafc}
+.edit-magnifier svg{width:100%;height:100%}
+.edit-magnifier::after{content:'+';position:absolute;inset:0;display:grid;place-items:center;color:#1d4ed8;font-size:22px}
+.edit-resume{margin-top:12px;width:100%;min-height:48px;font-size:15px}
+#planSvg .edit-wall{stroke:#475569;stroke-width:2;vector-effect:non-scaling-stroke}
+#planSvg .edit-pipe{fill:none;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}
+.plan-overview .engineering-fasteners-v21,.plan-overview .flow-arrow-supply,.plan-overview .flow-arrow-return,.plan-overview .engineering-axis-v21,.plan-overview .legacy-dim-text{display:none}
+@media(max-height:500px){#editInspector{max-height:27dvh;padding:4px 10px}.edit-context-head{min-height:24px}#editDock button{min-height:48px;flex-direction:row;gap:5px}body.mobile-editor-active .editor-bar{height:calc(48px + env(safe-area-inset-top));padding-bottom:2px}body.mobile-editor-active .zoom-fab{display:flex;bottom:6px}.edit-magnifier{width:112px;height:112px}}
+@media(min-width:800px){#editInspector{padding-left:max(16px,calc((100vw - 760px)/2));padding-right:max(16px,calc((100vw - 760px)/2))}#editDock{padding-left:max(12px,calc((100vw - 760px)/2));padding-right:max(12px,calc((100vw - 760px)/2))}}
+@media(prefers-reduced-motion:reduce){.bottom-sheet,.sheet-backdrop{transition:none}}
+@media(min-width:640px) and (max-height:500px){
+ #editInspector:not(:has(.edit-fields)){display:grid;grid-template-columns:1fr 1fr;align-items:center;gap:8px;max-height:30dvh;padding-top:4px;padding-bottom:4px}
+ #editInspector:not(:has(.edit-fields))>.edit-row{margin:0}
+ #editInspector:not(:has(.edit-fields))>p{grid-column:1/-1}
+}
