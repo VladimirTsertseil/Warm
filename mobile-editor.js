@@ -120,7 +120,7 @@ function renderPanel(){
   html=`<strong>${cutPick?'Теперь коснитесь конца Б':'Ластик: коснитесь начала А'}</strong><p>${cutPick?'Выберите вторую точку на этом же контуре. Участок между А и Б исчезнет.':'Можно выбрать точку прямо посередине прямого участка — не только на повороте.'}</p><div class="edit-row">${btn('editCancelRange','Отмена')}</div>`;
  }else if(tool==='draw'&&gap){
   const started=drawPoints.length>1;
-  html=`<strong>${started?'Ведите трубу к точке Б':'Нарисуйте новый участок А → Б'}</strong><p>Проведите пальцем или мышью свободно от А к Б. Конец притянется к Б.</p><div class="edit-row">${started?btn('editFinishDraw','Соединить с Б','class="edit-primary"'):''}${started?btn('editResetDraw','Стереть линию'):''}${btn('editCancelRange','Отмена')}</div>`;
+  html=`<strong>${started?'Ведите трубу к точке Б':'Нарисуйте новый участок А → Б'}</strong><p>Ведите пальцем примерно по нужному пути. Линия магнитится к прямым направлениям, остаётся в рабочей зоне и сама подгонится к Б.</p><div class="edit-row">${started?btn('editFinishDraw','Соединить с Б','class="edit-primary"'):''}${started?btn('editResetDraw','Стереть линию'):''}${btn('editCancelRange','Отмена')}</div>`;
  }else if(tool==='draw'){
   if(!plan.circuits.length)html=`<strong>Новый контур</strong><p>${state.supply?'Ставьте точки трубы на плане. Начало — у коллектора.':'Сначала укажите коллектор через основной экран.'}</p><div class="edit-row">${btn('editFinishNew','Соединить с обраткой',!drawPoints.length?'disabled':'')}${btn('editCancelRange','Отмена')}</div>`;
   else html=`<strong>Сначала вырежьте старый участок</strong><p>Ластик создаст две точки А и Б, между которыми можно нарисовать трубу заново.</p><div class="edit-row">${btn('editUseEraser','Открыть ластик','class="edit-primary"')}${btn('editCancelRange','Отмена')}</div>`;
@@ -162,28 +162,59 @@ function selectTool(next){
 }
 function setPreview(result,path,kind='local'){if(result.cancelled)return;if(!result.ok){setStatus(result.message,true);return;}preview={plan:result.plan,path,kind,validation:C.inspect(params(),result.plan)};render();scheduleSave();}
 function cancelRouting(){routing?.cancel();routing=null;}
-function search(operation){
- cancelRouting();const data={operation,input:params(),plan:copy(plan),locks:copy(locks),range:copy(range)},signature=JSON.stringify([data.input,data.plan,data.locks]);
- return new Promise(resolve=>{const worker=new Worker('./editor-worker.js?v=261-editor');let timer;const finish=result=>{clearTimeout(timer);worker.terminate();routing=null;resolve(active&&signature===JSON.stringify([params(),plan,locks])?result:{cancelled:true});};routing={cancel:()=>finish({cancelled:true})};timer=setTimeout(()=>finish({ok:false,message:'Поиск занял слишком много времени. Выберите меньший участок.'}),15000);worker.onmessage=e=>finish(e.data);worker.onerror=()=>finish({ok:false,message:'Не удалось построить участок.'});worker.postMessage(data);});
+function search(operation,extra={}){
+ cancelRouting();const data={operation,input:params(),plan:copy(plan),locks:copy(locks),range:copy(range),...copy(extra)},signature=JSON.stringify([data.input,data.plan,data.locks,data.range,data.guide||null]);
+ return new Promise(resolve=>{const worker=new Worker('./editor-worker.js?v=261-magnetic1');let timer;const finish=result=>{clearTimeout(timer);worker.terminate();routing=null;const currentGuide=operation==='guided'?copy(drawPoints):null;resolve(active&&signature===JSON.stringify([params(),plan,locks,range,currentGuide])?result:{cancelled:true});};routing={cancel:()=>finish({cancelled:true})};timer=setTimeout(()=>finish({ok:false,message:'Поиск занял слишком много времени. Проведите линию проще.'}),15000);worker.onmessage=e=>finish(e.data);worker.onerror=()=>finish({ok:false,message:'Не удалось построить участок.'});worker.postMessage(data);});
 }
 function appendDraw(p,snap=true){const last=drawPoints.at(-1);p=snap?{x:Math.round(p.x/10)*10,y:Math.round(p.y/10)*10}:copy(p);if(!last){drawPoints=[p];return;}if(Math.abs(p.x-last.x)>Math.abs(p.y-last.y))drawPoints.push({x:p.x,y:last.y},p);else drawPoints.push({x:last.x,y:p.y},p);drawPoints=E.clean(drawPoints);}
-function appendFree(p,force=false){
- p={x:Math.round(p.x/5)*5,y:Math.round(p.y/5)*5};const last=drawPoints.at(-1);if(!last){drawPoints=[p];return;}
- if(!force&&C.dist(last,p)*view.scale<5)return;if(!C.same(last,p))drawPoints.push(p);
+function magneticContext(){
+ if(!gap)return null;const n=E.normalize(params()),space=E.freeSpace(n),r=plan.circuits[gap.circuit]?.route,a=r?.[gap.start],b=r?.[gap.end];if(!r||!a||!b)return null;
+ const clear=n.pipeDiameterMm*1.5+2,occupied=[];
+ plan.circuits.forEach((c,cj)=>E.segments(c.route).forEach(([u,v],i)=>{
+  if(cj===gap.circuit&&i>=gap.start&&i<gap.end)return;
+  let p=copy(u),q=copy(v);
+  if(cj===gap.circuit&&i===gap.start-1){const d=C.dist(p,q);if(d<=clear)return;q={x:q.x+(p.x-q.x)*clear/d,y:q.y+(p.y-q.y)*clear/d};}
+  if(cj===gap.circuit&&i===gap.end){const d=C.dist(p,q);if(d<=clear)return;p={x:p.x+(q.x-p.x)*clear/d,y:p.y+(q.y-p.y)*clear/d};}
+  occupied.push([p,q]);
+ }));
+ return{n,space,r,a,b,pre:r[gap.start-1]||null,post:r[gap.end+1]||null,occupied,clearance:n.pipeDiameterMm*1.5};
 }
-function simplifyFree(points,tolerance){
- if(points.length<=2)return points.map(copy);
- const keep=new Set([0,points.length-1]),stack=[[0,points.length-1]];
- while(stack.length){const [a,b]=stack.pop();let best=-1,index=-1;for(let i=a+1;i<b;i++){const d=C.dist(points[i],C.projection(points[i],points[a],points[b]));if(d>best){best=d;index=i;}}if(best>tolerance&&index>a&&index<b){keep.add(index);stack.push([a,index],[index,b]);}}
- return points.filter((_,i)=>keep.has(i)).map(copy);
+function clampFree(p,ctx){
+ let best=null;for(const r of ctx.space.rects){const pad=Math.min(2,Math.max(0,Math.min(r.width,r.height)/4)),q={x:Math.max(r.x+pad,Math.min(r.x+r.width-pad,p.x)),y:Math.max(r.y+pad,Math.min(r.y+r.height-pad,p.y))},d=C.dist(p,q);if(!best||d<best.d)best={p:q,d};}
+ const q=best?best.p:copy(p);q.x=Math.round(q.x/10)*10;q.y=Math.round(q.y/10)*10;
+ // Rounding can land just outside a narrow eroded rectangle; clamp once more.
+ if(ctx.space.contains(q))return q;best=null;for(const r of ctx.space.rects){const x=Math.max(r.x+1,Math.min(r.x+r.width-1,q.x)),y=Math.max(r.y+1,Math.min(r.y+r.height-1,q.y)),d=Math.hypot(q.x-x,q.y-y);if(!best||d<best.d)best={p:{x,y},d};}return best?.p||q;
 }
-function finishFreeDraw(force=true){
+function segmentClear(a,b,ctx){return C.dist(a,b)<1||ctx.space.covers(a,b)&&!ctx.occupied.some(([u,v])=>E.segmentDistance(a,b,u,v)<ctx.clearance-1e-6);}
+function safeEndpoint(a,b,ctx){
+ if(segmentClear(a,b,ctx))return b;let lo=0,hi=1;for(let i=0;i<18;i++){const t=(lo+hi)/2,p={x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t};if(segmentClear(a,p,ctx))lo=t;else hi=t;}const t=Math.max(0,lo-.002),raw={x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t},q={x:Math.round(raw.x/10)*10,y:Math.round(raw.y/10)*10};return segmentClear(a,q,ctx)?q:raw;
+}
+function segmentAxis(a,b){return Math.abs(b.x-a.x)>=Math.abs(b.y-a.y)?'x':'y';}
+function magneticStroke(base,raw,ctx){
+ const start=base.at(-1);if(!start)return base;let axis;
+ if(base.length>1)axis=segmentAxis(base.at(-2),start);else if(ctx.pre)axis=segmentAxis(ctx.pre,start);else{const q=raw.find(p=>C.dist(p,start)>20/view.scale);axis=q?segmentAxis(start,q):'x';}
+ const switchPx=20,turnBand=Math.max(35,Math.min(ctx.n.pitch*.55,switchPx/view.scale)),minLeg=Math.max(ctx.n.minBendRadiusMm*2+5,ctx.n.pipeDiameterMm*5);
+ let anchor=copy(start),endpoint=copy(start),local=[copy(start)];
+ const project=(q,ax)=>{let p=ax==='x'?{x:q.x,y:anchor.y}:{x:anchor.x,y:q.y};p[ax]=Math.round(p[ax]/10)*10;return safeEndpoint(anchor,p,ctx);};
+ for(let i=1;i<raw.length;i++){
+  let q=clampFree(raw[i],ctx);if(C.dist(raw[i],ctx.b)*view.scale<=34)q=copy(ctx.b);
+  let next=project(q,axis),along=C.dist(anchor,next),perp=Math.abs((axis==='x'?q.y:q.x)-(axis==='x'?anchor.y:anchor.x));
+  if(perp>turnBand&&along>=minLeg){if(C.dist(anchor,next)>1){local.push(next);anchor=next;}axis=axis==='x'?'y':'x';next=project(q,axis);}
+  endpoint=next;
+ }
+ if(C.dist(local.at(-1),endpoint)>1)local.push(endpoint);
+ return E.clean([...base.slice(0,-1),...local]);
+}
+function appendMagnetic(p,force=false,g=gesture){
+ if(!g?.drawCtx||!g.baseDraw)return;const last=g.raw.at(-1);if(!force&&last&&C.dist(last,p)*view.scale<4)return;g.raw.push(copy(p));drawPoints=magneticStroke(g.baseDraw,g.raw,g.drawCtx);
+}
+function finishFreeDraw(force=true,tip=null){
  if(!gap)return false;const r=plan.circuits[gap.circuit]?.route,a=r?.[gap.start],b=r?.[gap.end];if(!a||!b)return false;
  if(drawPoints.length<2){setStatus('Проведите новую трубу от А к Б.',true);return false;}
- const near=C.dist(drawPoints.at(-1),b)*view.scale<=38;if(!force&&!near)return false;
- let path=drawPoints.map(copy);if(!C.same(path[0],a))path.unshift(copy(a));if(!C.same(path.at(-1),b))path.push(copy(b));
- path=simplifyFree(path,Math.max(8,7/view.scale));path[0]=copy(a);path[path.length-1]=copy(b);path=E.clean(path);
- setPreview(C.replace(plan,gap.circuit,gap.start,gap.end,path,locks),path);return true;
+ const near=C.dist(tip||drawPoints.at(-1),b)*view.scale<=46;if(!force&&!near)return false;
+ const guide=drawPoints.map(copy);if(!C.same(guide[0],a))guide.unshift(copy(a));
+ setStatus('Подгоняю линию по допустимой зоне…');
+ search('guided',{guide}).then(result=>{if(result.cancelled)return;setPreview(result,result.path);if(!preview)renderPanel();});return true;
 }
 function eraseTap(p){
  const found=C.nearest(plan,p,28/view.scale).find(h=>!cutPick||h.circuit===cutPick.circuit);if(!found){setStatus(cutPick?'Коснитесь этой же трубы.':'Коснитесь трубы в месте начала выреза.');return;}
@@ -234,7 +265,7 @@ function down(e){
  if(pointers.size===2){cancelGesture();const [a,b]=[...pointers.values()];gesture={kind:'pinch',distance:Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY),view:copy(view),mid:{clientX:(a.clientX+b.clientX)/2,clientY:(a.clientY+b.clientY)/2}};render();return;}
  if(pointers.size>2)return;
  const p=point(e);
- if(tool==='draw'&&gap&&!preview){const r=plan.circuits[gap.circuit]?.route,start=drawPoints.at(-1)||r?.[gap.start];if(!start||C.dist(p,start)*view.scale>34){gesture={kind:'drawBlocked',pointerId:e.pointerId,start:{clientX:e.clientX,clientY:e.clientY},view:copy(view),moved:false};setStatus(drawPoints.length>1?'Продолжите рисование с конца фиолетовой линии.':'Начните рисовать из точки А.');return;}gesture={kind:'freeDraw',pointerId:e.pointerId,start:{clientX:e.clientX,clientY:e.clientY},world:p,view:copy(view),before:snapshot(),moved:false};return;}
+ if(tool==='draw'&&gap&&!preview){cancelRouting();const r=plan.circuits[gap.circuit]?.route,start=drawPoints.at(-1)||r?.[gap.start];if(!start||C.dist(p,start)*view.scale>34){gesture={kind:'drawBlocked',pointerId:e.pointerId,start:{clientX:e.clientX,clientY:e.clientY},view:copy(view),moved:false};setStatus(drawPoints.length>1?'Продолжите рисование с конца фиолетовой линии.':'Начните рисовать из точки А.');return;}const ctx=magneticContext();gesture={kind:'freeDraw',pointerId:e.pointerId,start:{clientX:e.clientX,clientY:e.clientY},world:p,view:copy(view),before:snapshot(),moved:false,baseDraw:copy(drawPoints.length?drawPoints:[start]),raw:[copy(start),copy(p)],drawCtx:ctx};return;}
  const handle=handleAt(p);gesture={kind:handle||'pan',pointerId:e.pointerId,start:{clientX:e.clientX,clientY:e.clientY},world:p,view:copy(view),before:handle?snapshot():null,moved:false};
 }
 function showMagnifier(e,p){const r=workspace.getBoundingClientRect(),size=workspace.clientHeight<220?112:142;const left=Math.max(4,Math.min(r.width-size-4,e.clientX-r.left-size/2)),top=Math.max(4,e.clientY-r.top-size-36);magnifier.style.left=left+'px';magnifier.style.top=top+'px';magnifier.hidden=false;const side=size/(view.scale*2.5);magnifier.innerHTML=`<svg viewBox="${p.x-side/2} ${p.y-side/2} ${side} ${side}" xmlns="http://www.w3.org/2000/svg">${planSvg.innerHTML}</svg>`;}
@@ -246,7 +277,7 @@ function motion(e){
  const dx=e.clientX-gesture.start.clientX,dy=e.clientY-gesture.start.clientY;if(Math.hypot(dx,dy)>5)gesture.moved=true;if(!gesture.moved)return;
  if(gesture.kind==='drawBlocked')return;
  if(gesture.kind==='pan'){view.x=gesture.view.x-dx/view.scale;view.y=gesture.view.y-dy/view.scale;renderCanvas();return;}
- if(gesture.kind==='freeDraw'){appendFree(point(e));renderCanvas();showMagnifier(e,point(e));return;}
+ if(gesture.kind==='freeDraw'){appendMagnetic(point(e));renderCanvas();showMagnifier(e,drawPoints.at(-1)||point(e));return;}
  if(gesture.kind==='pipe'){
   const r=gesture.before.draft.plan.circuits[selection.circuit].route,h=Math.abs(r[selection.seg].y-r[selection.seg+1].y)<1e-6,delta=Math.round((h?dy:dx)/view.scale/10)*10,result=C.moveSegment(gesture.before.draft.plan,selection,delta,locks);
   if(result.ok){plan=result.plan;renderCanvas();showMagnifier(e,point(e));}
@@ -258,7 +289,7 @@ function up(e){
  const g=gesture;if(!g)return;gesture=null;
  if(e.type==='pointercancel'){if(g.before){plan=copy(g.before.draft.plan);state.supply=copy(g.before.geometry.supply);state.returnPoint=copy(g.before.geometry.returnPoint);syncCollectors();if(g.kind==='freeDraw')restoreScratch(g.before.draft.scratch);check();render();}return;}
  if(g.kind==='drawBlocked')return;
- if(g.kind==='freeDraw'){if(!g.moved){setStatus(drawPoints.length>1?'Ведите от конца фиолетовой линии к Б.':'Зажмите в точке А и проведите линию к Б.');render();return;}appendFree(point(e),true);remember(g.before);if(!finishFreeDraw(false)){render();scheduleSave();}return;}
+ if(g.kind==='freeDraw'){if(!g.moved){setStatus(drawPoints.length>1?'Ведите от конца фиолетовой линии к Б.':'Зажмите в точке А и проведите линию к Б.');render();return;}const tip=point(e);appendMagnetic(tip,true,g);remember(g.before);if(!finishFreeDraw(false,tip)){render();scheduleSave();}return;}
  if(!g.moved){tap(point(e));return;}
  if(g.before){if(JSON.stringify(g.before.draft.plan)!==JSON.stringify(plan)||JSON.stringify(g.before.geometry.supply)!==JSON.stringify(state.supply)){remember(g.before);check();scheduleSave();}render();}else scheduleSave();
 }

@@ -37,6 +37,61 @@ function replace(plan,ci,start,end,path,locks=[]){
  if(!locksPreserved(p,locks))return{ok:false,message:'В выбранном участке есть закреплённая труба'};
  return{ok:true,plan:p};
 }
+function routeDistance(p,route){let best=Infinity;for(const [a,b] of E.segments(route))best=Math.min(best,dist(p,projection(p,a,b)));return best;}
+function nearestFreePoint(p,space){let best=null;for(const r of space.rects){const pad=Math.min(2,Math.max(0,Math.min(r.width,r.height)/4)),q={x:Math.max(r.x+pad,Math.min(r.x+r.width-pad,p.x)),y:Math.max(r.y+pad,Math.min(r.y+r.height-pad,p.y))},d=dist(p,q);if(!best||d<best.distance)best={p:q,distance:d};}return best?.p||copy(p);}
+function guidedReplace(input,plan,ci,start,end,guide=[],locks=[]){
+ const r=plan.circuits[ci]?.route;if(!r||start<0||end>=r.length||start>=end)return{ok:false,message:'Отметьте две разные точки одного контура'};
+ const n=E.normalize(input),space=E.freeSpace(n),a=r[start],b=r[end],occupied=[],clear=n.pipeDiameterMm*1.5+1;
+ plan.circuits.forEach((c,cj)=>E.segments(c.route).forEach(([u,v],i)=>{
+  if(cj===ci&&i>=start&&i<end)return;
+  let p=copy(u),q=copy(v);
+  if(cj===ci&&i===start-1){const d=dist(p,q);if(d<=clear)return;q={x:q.x+(p.x-q.x)*clear/d,y:q.y+(p.y-q.y)*clear/d};}
+  if(cj===ci&&i===end){const d=dist(p,q);if(d<=clear)return;p={x:p.x+(q.x-p.x)*clear/d,y:p.y+(q.y-p.y)*clear/d};}
+  occupied.push([p,q]);
+ }));
+ const candidates=[];
+ const addCandidate=path=>{
+  path=E.clean(path);if(path.length<2||!same(path[0],a)||!same(path.at(-1),b))return;
+  const result=replace(plan,ci,start,end,path,locks);if(!result.ok||!E.validate(input,result.plan).ok)return;
+  const g=guide?.length?guide:[a,b],guideCost=g.reduce((sum,p)=>sum+routeDistance(p,path),0)/Math.max(1,g.length);
+  const turns=Math.max(0,path.length-2),score=guideCost*6+E.length(path)*.025+turns*n.minBendRadiusMm*.12;
+  candidates.push({...result,path,score});
+ };
+ // A user's magnetic preview is accepted unchanged whenever it already satisfies
+ // every engineering gate. Otherwise it becomes a guide for the router below.
+ if(guide?.length){let raw=guide.map(copy);if(!same(raw[0],a))raw.unshift(copy(a));if(!same(raw.at(-1),b))raw.push(copy(b));addCandidate(raw);}
+ const snap=p=>nearestFreePoint({x:Math.round(p.x/10)*10,y:Math.round(p.y/10)*10},space);
+ let internal=(guide||[]).map(snap).filter(p=>dist(p,a)>n.minBendRadiusMm*1.6&&dist(p,b)>n.minBendRadiusMm*1.6);
+ // Keep the gesture shape, but do not turn every finger sample into a mandatory
+ // router waypoint. Direction changes/extrema survive because the live editor
+ // has already reduced the gesture to an orthogonal magnetic polyline.
+ const compact=[];for(const p of internal)if(!compact.length||dist(compact.at(-1),p)>n.minBendRadiusMm*1.25)compact.push(p);internal=compact;
+ if(internal.length>5){const sampled=[];for(let i=0;i<5;i++)sampled.push(internal[Math.round(i*(internal.length-1)/4)]);internal=sampled;}
+ const sets=[],seen=new Set(),pushSet=xs=>{const key=JSON.stringify(xs);if(!seen.has(key)){seen.add(key);sets.push(xs);}};
+ pushSet(internal);
+ if(internal.length>2)pushSet(internal.filter((_,i)=>i%2===0));
+ if(internal.length>1)pushSet([internal[0],internal.at(-1)]);
+ if(internal.length)pushSet([internal[Math.floor(internal.length/2)]]);
+ pushSet([]);
+ const advance=(p,q,d)=>{const len=dist(p,q);return len?{x:p.x+(p.x-q.x)*d/len,y:p.y+(p.y-q.y)*d/len}:copy(p);};
+ const pre=r[start-1]||null,post=r[end+1]||null;
+ const stems=[Math.max(n.pitch,2*n.minBendRadiusMm),2*n.minBendRadiusMm,0].filter((v,i,a)=>!a.slice(0,i).some(x=>Math.abs(x-v)<1e-6));
+ for(const stem of stems){
+  const aa=stem&&pre?advance(a,pre,stem):a,bb=stem&&post?advance(b,post,stem):b;
+  for(const waypoints of sets){
+   const chain=[aa,...waypoints,bb],middle=[];let failed=false;
+   for(let i=1;i<chain.length;i++){
+    const piece=E.connector(chain[i-1],chain[i],space,[],occupied,n);if(!piece){failed=true;break;}
+    if(!middle.length)middle.push(...piece);else middle.push(...piece.slice(1));
+   }
+   if(!failed)addCandidate(E.clean([a,...middle,b]));
+  }
+ }
+ candidates.sort((x,y)=>x.score-y.score||E.length(x.path)-E.length(y.path));
+ if(candidates.length)return candidates[0];
+ const fallback=bypass(input,plan,ci,start,end,locks);if(fallback.ok)return fallback;
+ return{ok:false,message:'Здесь не получается безопасно уложить трубу. Проведите пальцем немного дальше от стены или соседней трубы.'};
+}
 function inspect(input,plan){
  let hard,n,space;try{n=E.normalize(input);space=E.freeSpace(n);hard=E.validate(input,plan,space);}catch{return{ok:false,checks:{H5_continuity:false},issues:[{key:'H5_continuity',message:'Укажите коллектор на стене',circuit:0,segments:[]}]};}
  const issues=[];
@@ -135,5 +190,5 @@ function resizeWall(sections,edge,length){
  if(result.some(r=>r.width<50||r.height<50))throw new Error('Этот размер делает часть комнаты слишком узкой');
  return result;
 }
-return{copy,dist,same,projection,edgeKey,locksPreserved,updated,nearest,prepareCut,moveSegment,replace,inspect,bypass,reconnect,boundaries,resizeWall,labels};
+return{copy,dist,same,projection,edgeKey,locksPreserved,updated,nearest,prepareCut,moveSegment,replace,guidedReplace,inspect,bypass,reconnect,boundaries,resizeWall,labels};
 });
