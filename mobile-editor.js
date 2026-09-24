@@ -4,17 +4,17 @@
 const E=WarmEngine,C=WarmEditorCore,workspace=document.querySelector('#editorView .workspace'),panel=$('editInspector');
 const DRAFT_KEY='warm-editor-draft-v261',copy=C.copy,esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const baseRender=renderPlan,baseSerialize=serializeState,baseLoad=loadScheme,baseNew=newScheme,baseZoom=zoomBy;
-let active=false,plan=null,baseline=null,locks=[],selection=null,hits=[],hitIndex=0,tool='select',returnTool='select',range=null,preview=null,drawPoints=[],compare=false,expanded=false,issues=[],validation=null;
-let undo=[],redo=[],view=null,gesture=null,pointers=new Map(),persistTimer=null,frame=null,lastSize='',routing=null;
+let active=false,plan=null,baseline=null,locks=[],selection=null,hits=[],hitIndex=0,tool='select',returnTool='select',range=null,cutPick=null,gap=null,preview=null,drawPoints=[],compare=false,expanded=false,issues=[],validation=null;
+let undo=[],redo=[],view=null,gesture=null,pointers=new Map(),persistTimer=null,frame=null,lastSize='',routing=null,cutBefore=null;
 const magnifier=document.createElement('div');magnifier.className='edit-magnifier';magnifier.hidden=true;workspace.append(magnifier);
 const resume=document.createElement('button');resume.className='secondary-btn edit-resume';resume.textContent='Продолжить черновик';resume.hidden=true;$('homeView').querySelector('.hero').append(resume);
 const btn=(id,text,extra='')=>`<button type="button" id="${id}" ${extra}>${text}</button>`;
 const field=(id,label,value,extra='')=>`<label>${label}<input id="${id}" type="number" inputmode="decimal" value="${Math.round(value*100)/100}" ${extra}></label>`;
 function params(){return WarmV260.input();}
-function pack(){return{plan:copy(plan),baseline:copy(baseline),locks:copy(locks),view:copy(view),scratch:{tool:tool==='more'?returnTool:tool,range:copy(range),drawPoints:copy(drawPoints),preview:copy(preview)}};}
-function restoreScratch(s){tool=s?.tool||'select';range=copy(s?.range||null);drawPoints=copy(s?.drawPoints||[]);preview=copy(s?.preview||null);if(preview)preview.validation=C.inspect(params(),preview.plan);}
+function pack(){return{plan:copy(plan),baseline:copy(baseline),locks:copy(locks),view:copy(view),scratch:{tool:tool==='more'?returnTool:tool,range:copy(range),cutPick:copy(cutPick),gap:copy(gap),drawPoints:copy(drawPoints),preview:copy(preview)}};}
+function restoreScratch(s){tool=s?.tool||'select';range=copy(s?.range||null);cutPick=copy(s?.cutPick||null);gap=copy(s?.gap||null);drawPoints=copy(s?.drawPoints||[]);preview=copy(s?.preview||null);if(preview)preview.validation=C.inspect(params(),preview.plan);}
 function snapshot(){return{draft:pack(),geometry:{sections:copy(state.sections),obstacles:copy(state.obstacles||[]),supply:copy(state.supply),returnPoint:copy(state.returnPoint),shapeType:state.shapeType,shapeParams:copy(state.shapeParams),shapeAxes:copy(state.shapeAxes),roomAdded:[...state.roomAdded],roomRemoved:[...state.roomRemoved],excluded:[...state.excluded]}};}
-function restore(s){cancelRouting();plan=copy(s.draft.plan);baseline=copy(s.draft.baseline);locks=copy(s.draft.locks);const g=copy(s.geometry);for(const k of ['roomAdded','roomRemoved','excluded'])g[k]=new Set(g[k]);Object.assign(state,g);syncCollectors();recomputeGeometry();syncInputs();syncShapeUiV5();selection=null;restoreScratch(s.draft.scratch);check();render();scheduleSave();}
+function restore(s){cancelRouting();cutBefore=null;plan=copy(s.draft.plan);baseline=copy(s.draft.baseline);locks=copy(s.draft.locks);const g=copy(s.geometry);for(const k of ['roomAdded','roomRemoved','excluded'])g[k]=new Set(g[k]);Object.assign(state,g);syncCollectors();recomputeGeometry();syncInputs();syncShapeUiV5();selection=null;restoreScratch(s.draft.scratch);check();render();scheduleSave();}
 function remember(before=snapshot()){undo.push(before);if(undo.length>60)undo.shift();redo=[];}
 function history(back){const from=back?undo:redo,to=back?redo:undo;if(!from.length)return;to.push(snapshot());restore(from.pop());}
 function check(){validation=C.inspect(params(),plan);issues=validation.issues;plan.ok=validation.ok;plan.hard={ok:validation.ok,checks:copy(validation.checks)};state.manualV2.circuits=copy(plan.circuits);state.manualV2.validation={level:validation.ok?'ok':'bad',hard:issues.length};return validation;}
@@ -33,7 +33,7 @@ function enter(){
  plan=copy(saved?.plan||state.enginePlanV1||{version:'2.6.1',planner:'unified-bcd',kind:'manual',circuits:[]});
  if(!saved&&state.manualV2?.loaded&&state.manualV2.dirty&&state.manualV2.circuits?.length){const old=state.manualV2;plan.circuits=old.circuits.map(c=>({...copy(plan.circuits.find(x=>x.id===c.id)||{}),...copy(c),bendRadiusMm:requestedBendRadiusV10()}));}
  if(!plan.circuits.length&&state.route?.length)plan.circuits=[{id:1,route:copy(state.route),supply:copy(state.supply),returnPoint:copy(state.returnPoint),bendRadiusMm:requestedBendRadiusV10()}];
- baseline=copy(saved?.baseline||plan);locks=copy(saved?.locks||[]);selection=null;hits=[];range=null;preview=null;drawPoints=[];undo=[];redo=[];tool='select';expanded=false;compare=false;
+ baseline=copy(saved?.baseline||plan);locks=copy(saved?.locks||[]);selection=null;hits=[];range=null;cutPick=null;gap=null;cutBefore=null;preview=null;drawPoints=[];undo=[];redo=[];tool='select';expanded=false;compare=false;
  active=true;state.manualV2=blankManualStateV2A();state.manualV2.active=true;state.mode='manualV2';document.body.classList.add('mobile-editor-active','manual-v2-active');
  $('editActions').hidden=false;$('editDock').hidden=false;panel.hidden=false;view=saved?.view?copy(saved.view):null;
  restoreScratch(saved?.scratch);check();renderPanel();if(!view)fit();else render();scheduleSave();
@@ -43,7 +43,7 @@ function enter(){
 function deactivate(){cancelRouting();active=false;gesture=null;pointers.clear();magnifier.hidden=true;state.manualV2=blankManualStateV2A();state.mode='inspect';document.body.classList.remove('mobile-editor-active','manual-v2-active');$('editActions').hidden=true;$('editDock').hidden=true;panel.hidden=true;planSvg.classList.remove('manual-v2-mode');planSvg.style.removeProperty('width');planSvg.style.removeProperty('height');}
 function leave(draft=false){
  if(!active)return true;
- if(!draft&&(preview||drawPoints.length)){setStatus('Примените участок или отмените его перед завершением.',true);return false;}
+ if(!draft&&(preview||gap||drawPoints.length)){setStatus('Примените новый участок или отмените вырез перед завершением.',true);return false;}
  if(!draft&&!check().ok){render();setStatus(issues[0]?.message||'Завершите контур или сохраните черновик.',true);return false;}
  if(!draft){plan.ok=true;plan.planner='unified-bcd';plan.circuits.forEach(c=>{c.length=E.length(c.route);c.bendRadiusMm=requestedBendRadiusV10();});plan.totalLength=plan.circuits.reduce((s,c)=>s+c.length,0);plan.quality=E.quality(params(),plan);state.enginePlanV1=copy(plan);state.route=[];state.routeComplete=true;state.routeCandidates=[];state.v260Engineering={proven:true,hardOK:true,hard:validation};}
  else{state.enginePlanV1=null;state.route=[];state.routeComplete=false;}
@@ -70,9 +70,18 @@ function renderCanvas(){
  for(const o of params().obstacles)html+=`<rect x="${o.x}" y="${o.y}" width="${o.width}" height="${o.height}" fill="#e2e8f0" stroke="#64748b" stroke-width="1.5" vector-effect="non-scaling-stroke"/>`;
  if(compare)for(const c of baseline.circuits){html+=`<path class="edit-pipe" d="${pathD(c.route)}" stroke="#94a3b8" stroke-width="2" stroke-dasharray="5 5" opacity=".7"/>`;}
  current.circuits.forEach((c,ci)=>{
-  const curve=E.rounded(c.route,c.bendRadiusMm||requestedBendRadiusV10()),dim=selection?.type==='pipe';
-  html+=`<g opacity="${dim ? .25 : 1}" data-edit-circuit="${ci}"><path class="edit-pipe" d="${curve?.hotSvg||pathD(c.route)}" stroke="#e64d48" stroke-width="2.4"/><path class="edit-pipe" d="${curve?.coldSvg||''}" stroke="#2874d4" stroke-width="2.4"/>`;
-  if(detail&&state.showFastenersV21!==false)for(const [a,b] of E.segments(c.route)){const len=C.dist(a,b);for(let d=250;d<len;d+=Number(state.fastenerStepMm)||500)html+=`<circle class="edit-detail" cx="${a.x+(b.x-a.x)*d/len}" cy="${a.y+(b.y-a.y)*d/len}" r="${1.7/s}" fill="#334155"/>`;}
+  const dim=selection?.type==='pipe',isGap=!!(gap&&!preview&&ci===gap.circuit);
+  html+=`<g opacity="${dim ? .25 : 1}" data-edit-circuit="${ci}">`;
+  if(isGap){
+   const left=c.route.slice(0,gap.start+1),right=c.route.slice(gap.end);
+   if(left.length>1)html+=`<path class="edit-pipe" d="${pathD(left)}" stroke="#e64d48" stroke-width="2.4"/>`;
+   if(right.length>1)html+=`<path class="edit-pipe" d="${pathD(right)}" stroke="#2874d4" stroke-width="2.4"/>`;
+   if(detail&&state.showFastenersV21!==false)for(const chunk of [left,right])for(const [a,b] of E.segments(chunk)){const len=C.dist(a,b);for(let d=250;d<len;d+=Number(state.fastenerStepMm)||500)html+=`<circle class="edit-detail" cx="${a.x+(b.x-a.x)*d/len}" cy="${a.y+(b.y-a.y)*d/len}" r="${1.7/s}" fill="#334155"/>`;}
+  }else{
+   const curve=E.rounded(c.route,c.bendRadiusMm||requestedBendRadiusV10());
+   html+=`<path class="edit-pipe" d="${curve?.hotSvg||pathD(c.route)}" stroke="#e64d48" stroke-width="2.4"/><path class="edit-pipe" d="${curve?.coldSvg||''}" stroke="#2874d4" stroke-width="2.4"/>`;
+   if(detail&&state.showFastenersV21!==false)for(const [a,b] of E.segments(c.route)){const len=C.dist(a,b);for(let d=250;d<len;d+=Number(state.fastenerStepMm)||500)html+=`<circle class="edit-detail" cx="${a.x+(b.x-a.x)*d/len}" cy="${a.y+(b.y-a.y)*d/len}" r="${1.7/s}" fill="#334155"/>`;}
+  }
   html+='</g>';
  });
  for(const lock of locks){const c=current.circuits.find(c=>c.id===lock.circuit);const edge=c&&E.segments(c.route).find(([a,b])=>C.edgeKey(a,b)===lock.edge);if(edge)html+=line(...edge,'#64748b',5,'stroke-dasharray="2 6"');}
@@ -81,8 +90,9 @@ function renderCanvas(){
   const r=current.circuits[selection.circuit]?.route,a=r?.[selection.seg],b=r?.[selection.seg+1];
   if(a&&b){html+=line(a,b,'#153eaf',6);const p={x:(a.x+b.x)/2,y:(a.y+b.y)/2};html+=`<circle cx="${p.x}" cy="${p.y}" r="${22/s}" fill="transparent" data-edit-handle="pipe"/>${dot(p,'↕')}`;}
  }
+ if(cutPick&&!gap)html+=dot(cutPick.at,'А','#16a34a');
  if(range){const r=plan.circuits[range.circuit]?.route;if(r){html+=dot(r[range.start],'А','#16a34a');if(range.end!=null)html+=dot(r[range.end],'Б','#7c3aed');}}
- if(drawPoints.length)html+=`<path class="edit-pipe" d="${pathD(drawPoints)}" stroke="#7c3aed" stroke-width="4" stroke-dasharray="7 5"/>`;
+ if(drawPoints.length)html+=`<path class="edit-pipe edit-freehand" d="${pathD(drawPoints)}" stroke="#7c3aed" stroke-width="4" stroke-dasharray="7 5"/>`;
  if(preview?.path)html+=`<path class="edit-pipe" d="${pathD(preview.path)}" stroke="${preview.validation.ok?'#059669':'#b91c1c'}" stroke-width="5" stroke-dasharray="8 6"/>`;
  if(preview?.kind==='reconnect')preview.plan.circuits.forEach((c,ci)=>{const old=new Set(E.segments(plan.circuits[ci].route).map(e=>C.edgeKey(...e)));for(const edge of E.segments(c.route))if(!old.has(C.edgeKey(...edge)))html+=line(...edge,'#059669',5,'stroke-dasharray="8 6"');});
  const issue=(preview?.validation?.issues||issues)[0],badRoute=current.circuits[issue?.circuit]?.route,segment=issue?.segments[0];
@@ -104,12 +114,19 @@ function renderPanel(){
  document.querySelectorAll('[data-edit-tool]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.editTool===tool)));
  let html='';
  if(tool==='more'){
-  html=`<div class="edit-context-head"><strong>Ещё</strong>${btn('editCloseMore','×','aria-label="Закрыть меню"')}</div><div class="edit-row">${btn('editLock',isLocked()?'Открепить':'Закрепить',selection?.type==='pipe'?'':'disabled')}${btn('editCompare',compare?'Скрыть сравнение':'Сравнить')}${btn('editFit','Весь план')}</div><div class="edit-row">${btn('editSaveDraft','Сохранить черновик')}${btn('editCheck','Проверить')}</div>`;
+  html=`<div class="edit-context-head"><strong>Ещё</strong>${btn('editCloseMore','×','aria-label="Закрыть меню"')}</div><div class="edit-row">${btn('editLock',isLocked()?'Открепить':'Закрепить',selection?.type==='pipe'?'':'disabled')}${btn('editCompare',compare?'Скрыть сравнение':'Сравнить')}${btn('editFit','Весь план')}</div><div class="edit-row">${btn('editAutoBypass','Автообход')}${btn('editSaveDraft','Сохранить черновик')}${btn('editCheck','Проверить')}</div>`;
  }else if(preview){html=`<strong>${preview.kind==='reconnect'?'Подключение коллектора':'Предварительный участок А → Б'}</strong><p class="${preview.validation.ok?'':'edit-error'}">${preview.validation.ok?'Проверка пройдена. Остальная схема сохраняется.':esc(preview.validation.issues[0]?.message||'Требуется правка')}</p><div class="edit-row">${btn('editApply','Применить',`class="edit-primary" ${preview.validation.ok?'':'aria-label="Применить в черновик"'}`)}${btn('editCancelRange','Отмена')}</div>`;
- }else if(tool==='draw'||tool==='rebuild'){
-  const instruction=!range?'Коснитесь начала участка А':range.end==null?'Коснитесь конца Б на том же контуре':tool==='draw'?'Ставьте точки нового пути на плане':'Выбран участок А → Б';
-  html=`<strong>${instruction}</strong><p>Точки привязываются к ближайшему повороту трубы.</p><div class="edit-row">${range?.end!=null?btn(tool==='draw'?'editFinishDraw':'editBypass',tool==='draw'?'Соединить с Б':'Обойти препятствие','class="edit-primary"'):''}${btn('editCancelRange','Отмена')}</div>`;
+ }else if(tool==='erase'){
+  html=`<strong>${cutPick?'Теперь коснитесь конца Б':'Ластик: коснитесь начала А'}</strong><p>${cutPick?'Выберите вторую точку на этом же контуре. Участок между А и Б исчезнет.':'Можно выбрать точку прямо посередине прямого участка — не только на повороте.'}</p><div class="edit-row">${btn('editCancelRange','Отмена')}</div>`;
+ }else if(tool==='draw'&&gap){
+  const started=drawPoints.length>1;
+  html=`<strong>${started?'Ведите трубу к точке Б':'Нарисуйте новый участок А → Б'}</strong><p>Проведите пальцем или мышью свободно от А к Б. Конец притянется к Б.</p><div class="edit-row">${started?btn('editFinishDraw','Соединить с Б','class="edit-primary"'):''}${started?btn('editResetDraw','Стереть линию'):''}${btn('editCancelRange','Отмена')}</div>`;
+ }else if(tool==='draw'){
   if(!plan.circuits.length)html=`<strong>Новый контур</strong><p>${state.supply?'Ставьте точки трубы на плане. Начало — у коллектора.':'Сначала укажите коллектор через основной экран.'}</p><div class="edit-row">${btn('editFinishNew','Соединить с обраткой',!drawPoints.length?'disabled':'')}${btn('editCancelRange','Отмена')}</div>`;
+  else html=`<strong>Сначала вырежьте старый участок</strong><p>Ластик создаст две точки А и Б, между которыми можно нарисовать трубу заново.</p><div class="edit-row">${btn('editUseEraser','Открыть ластик','class="edit-primary"')}${btn('editCancelRange','Отмена')}</div>`;
+ }else if(tool==='rebuild'){
+  const instruction=!range?'Коснитесь начала участка А':range.end==null?'Коснитесь конца Б на том же контуре':'Выбран участок А → Б';
+  html=`<strong>${instruction}</strong><p>Точки привязываются к ближайшему повороту трубы.</p><div class="edit-row">${range?.end!=null?btn('editBypass','Обойти препятствие','class="edit-primary"'):''}${btn('editCancelRange','Отмена')}</div>`;
  }else if(selection?.type==='pipe'){
   const d=wallDistance(),c=plan.circuits[selection.circuit],locked=isLocked();
   html=`<div class="edit-context-head"><strong>Контур ${esc(c.id)} · ${d?'от стены '+Math.round(d.distance)+' мм':'участок трубы'}${locked?' · закреплён':''}</strong>${btn('editExpand',expanded?'⌄':'Точно',`aria-label="${expanded?'Свернуть':'Точный ввод'}" aria-expanded="${expanded}"`)}</div><div class="edit-row">${btn('editPrev','‹','class="edit-cycle" aria-label="Предыдущий проход" '+(hits.length<2?'disabled':''))}${btn('editMinus','−10 мм',locked?'disabled':'')}${btn('editPlus','+10 мм',locked?'disabled':'')}${btn('editNext','›','class="edit-cycle" aria-label="Следующий проход" '+(hits.length<2?'disabled':''))}</div>`;
@@ -134,8 +151,15 @@ function render(){renderPanel();renderCanvas();}
 function isLocked(){if(selection?.type!=='pipe')return false;const c=plan.circuits[selection.circuit],r=c.route;return locks.some(l=>l.circuit===c.id&&l.edge===C.edgeKey(r[selection.seg],r[selection.seg+1]));}
 function move(delta){if(selection?.type!=='pipe')return;const result=C.moveSegment(plan,selection,delta,locks);if(!result.ok){setStatus(result.message,true);return;}commit(result.plan);}
 function cycle(step){if(!hits.length)return;hitIndex=(hitIndex+step+hits.length)%hits.length;selection={type:'pipe',...hits[hitIndex]};render();}
-function cancelRange(){cancelRouting();tool='select';range=null;preview=null;drawPoints=[];render();scheduleSave();}
-function selectTool(next){cancelRouting();cancelGesture();if(next==='more'){if(tool==='more')tool=returnTool;else{returnTool=tool;tool='more';}render();scheduleSave();return;}preview=null;drawPoints=[];range=null;tool=next;expanded=false;if(next==='draw'&&!plan.circuits.length&&state.supply){try{const n=E.normalize(params()),ports=E.manifoldPorts(n,1,E.freeSpace(n));if(ports){drawPoints=[ports[0].supply,ports[0].innerSupply];}}catch{}}render();scheduleSave();}
+function cancelRange(){cancelRouting();cutBefore=null;tool='select';range=null;cutPick=null;gap=null;preview=null;drawPoints=[];render();scheduleSave();}
+function selectTool(next){
+ cancelRouting();cancelGesture();
+ if(next==='more'){if(tool==='more')tool=returnTool;else{returnTool=tool;tool='more';}render();scheduleSave();return;}
+ if(gap&&next==='draw'){tool='draw';expanded=false;render();scheduleSave();return;}
+ preview=null;drawPoints=[];range=null;cutPick=null;gap=null;cutBefore=null;tool=next;expanded=false;selection=null;
+ if(next==='draw'&&!plan.circuits.length&&state.supply){try{const n=E.normalize(params()),ports=E.manifoldPorts(n,1,E.freeSpace(n));if(ports){drawPoints=[ports[0].supply,ports[0].innerSupply];}}catch{}}
+ render();scheduleSave();
+}
 function setPreview(result,path,kind='local'){if(result.cancelled)return;if(!result.ok){setStatus(result.message,true);return;}preview={plan:result.plan,path,kind,validation:C.inspect(params(),result.plan)};render();scheduleSave();}
 function cancelRouting(){routing?.cancel();routing=null;}
 function search(operation){
@@ -143,6 +167,30 @@ function search(operation){
  return new Promise(resolve=>{const worker=new Worker('./editor-worker.js?v=261-editor');let timer;const finish=result=>{clearTimeout(timer);worker.terminate();routing=null;resolve(active&&signature===JSON.stringify([params(),plan,locks])?result:{cancelled:true});};routing={cancel:()=>finish({cancelled:true})};timer=setTimeout(()=>finish({ok:false,message:'Поиск занял слишком много времени. Выберите меньший участок.'}),15000);worker.onmessage=e=>finish(e.data);worker.onerror=()=>finish({ok:false,message:'Не удалось построить участок.'});worker.postMessage(data);});
 }
 function appendDraw(p,snap=true){const last=drawPoints.at(-1);p=snap?{x:Math.round(p.x/10)*10,y:Math.round(p.y/10)*10}:copy(p);if(!last){drawPoints=[p];return;}if(Math.abs(p.x-last.x)>Math.abs(p.y-last.y))drawPoints.push({x:p.x,y:last.y},p);else drawPoints.push({x:last.x,y:p.y},p);drawPoints=E.clean(drawPoints);}
+function appendFree(p,force=false){
+ p={x:Math.round(p.x/5)*5,y:Math.round(p.y/5)*5};const last=drawPoints.at(-1);if(!last){drawPoints=[p];return;}
+ if(!force&&C.dist(last,p)*view.scale<5)return;if(!C.same(last,p))drawPoints.push(p);
+}
+function simplifyFree(points,tolerance){
+ if(points.length<=2)return points.map(copy);
+ const keep=new Set([0,points.length-1]),stack=[[0,points.length-1]];
+ while(stack.length){const [a,b]=stack.pop();let best=-1,index=-1;for(let i=a+1;i<b;i++){const d=C.dist(points[i],C.projection(points[i],points[a],points[b]));if(d>best){best=d;index=i;}}if(best>tolerance&&index>a&&index<b){keep.add(index);stack.push([a,index],[index,b]);}}
+ return points.filter((_,i)=>keep.has(i)).map(copy);
+}
+function finishFreeDraw(force=true){
+ if(!gap)return false;const r=plan.circuits[gap.circuit]?.route,a=r?.[gap.start],b=r?.[gap.end];if(!a||!b)return false;
+ if(drawPoints.length<2){setStatus('Проведите новую трубу от А к Б.',true);return false;}
+ const near=C.dist(drawPoints.at(-1),b)*view.scale<=38;if(!force&&!near)return false;
+ let path=drawPoints.map(copy);if(!C.same(path[0],a))path.unshift(copy(a));if(!C.same(path.at(-1),b))path.push(copy(b));
+ path=simplifyFree(path,Math.max(8,7/view.scale));path[0]=copy(a);path[path.length-1]=copy(b);path=E.clean(path);
+ setPreview(C.replace(plan,gap.circuit,gap.start,gap.end,path,locks),path);return true;
+}
+function eraseTap(p){
+ const found=C.nearest(plan,p,28/view.scale).find(h=>!cutPick||h.circuit===cutPick.circuit);if(!found){setStatus(cutPick?'Коснитесь этой же трубы.':'Коснитесь трубы в месте начала выреза.');return;}
+ if(!cutPick){cutBefore=snapshot();cutPick={circuit:found.circuit,seg:found.seg,at:copy(found.at)};selection=null;render();scheduleSave();return;}
+ const before=cutBefore||snapshot(),result=C.prepareCut(plan,cutPick.circuit,cutPick,found,locks);if(!result.ok){setStatus(result.message,true);return;}
+ plan=result.plan;range={circuit:result.circuit,start:result.start,end:result.end};gap=copy(range);cutPick=null;cutBefore=null;drawPoints=[copy(result.a)];preview=null;tool='draw';selection=null;remember(before);check();render();scheduleSave();setStatus('Участок вырезан. Проведите новую трубу от А к Б.');
+}
 function rangeTap(p){
  if(!plan.circuits.length){if(tool==='draw'&&drawPoints.length){remember();appendDraw(p);renderCanvas();renderPanel();scheduleSave();}return;}
  if(range?.end!=null){if(tool==='draw'){remember();appendDraw(p);render();scheduleSave();}return;}
@@ -167,7 +215,9 @@ function editWall(){const edge=C.boundaries(params().sections)[selection.index],
 function editObstacle(){const i=selection.index,o=state.obstacles[i],gaps=obstacleGaps(o),w=Number($('editObstacleW').value),h=Number($('editObstacleH').value),x=gaps.left.coordinate+Number($('editObstacleX').value),y=gaps.top.coordinate+Number($('editObstacleY').value);geometryCommit(()=>{if(![x,y,w,h].every(Number.isFinite)||w<50||h<50)throw Error('Размеры препятствия — не меньше 50 мм');const room=E.freeSpace({sections:params().sections,obstacles:[],wallOffsetMm:0,pipeDiameterMm:0}),candidate={x,y,width:w,height:h};const area=E.decomposition(room.raw.flatMap(r=>{const l=Math.max(r.x,x),t=Math.max(r.y,y),right=Math.min(r.x+r.width,x+w),bottom=Math.min(r.y+r.height,y+h);return right>l&&bottom>t?[{x:l,y:t,width:right-l,height:bottom-t}]:[];})).reduce((s,r)=>s+r.width*r.height,0);if(Math.abs(area-w*h)>1)throw Error('Препятствие выходит за границу комнаты');state.obstacles[i]={...o,...candidate};});}
 function tap(p){
  if(tool==='more')tool=returnTool;
- if(tool==='draw'||tool==='rebuild'){rangeTap(p);return;}
+ if(tool==='erase'){eraseTap(p);return;}
+ if(tool==='rebuild'){rangeTap(p);return;}
+ if(tool==='draw'){if(!plan.circuits.length){rangeTap(p);return;}if(gap){setStatus('Проведите линию от А к Б, не отдельными касаниями.');return;}setStatus('Сначала вырежьте участок ластиком.');return;}
  const col=centerCollector();if(col&&C.dist(p,col)*view.scale<28){selection={type:'collector'};expanded=false;render();return;}
  const obstacle=(state.obstacles||[]).findIndex(o=>p.x>=o.x&&p.x<=o.x+o.width&&p.y>=o.y&&p.y<=o.y+o.height);
  if(obstacle>=0){selection={type:'obstacle',index:obstacle};expanded=false;render();return;}
@@ -177,13 +227,15 @@ function tap(p){
  selection=hits.length?{type:'pipe',...hits[0]}:null;expanded=false;render();
 }
 function handleAt(p){if(tool!=='select')return null;if(selection?.type==='pipe'){const r=plan.circuits[selection.circuit].route,a=r[selection.seg],b=r[selection.seg+1];if(C.dist(p,{x:(a.x+b.x)/2,y:(a.y+b.y)/2})*view.scale<=22)return'pipe';}if(selection?.type==='collector'&&C.dist(p,centerCollector())*view.scale<=28)return'collector';return null;}
-function cancelGesture(){if(gesture?.before&&gesture.kind!=='pinch'){const b=gesture.before;plan=copy(b.draft.plan);state.supply=copy(b.geometry.supply);state.returnPoint=copy(b.geometry.returnPoint);syncCollectors();check();}gesture=null;magnifier.hidden=true;}
+function cancelGesture(){if(gesture?.before&&gesture.kind!=='pinch'){const b=gesture.before;plan=copy(b.draft.plan);state.supply=copy(b.geometry.supply);state.returnPoint=copy(b.geometry.returnPoint);syncCollectors();if(gesture.kind==='freeDraw')restoreScratch(b.draft.scratch);check();}gesture=null;magnifier.hidden=true;}
 function down(e){
  if(!active||e.target.closest('button')||e.button>0)return;e.preventDefault();e.stopPropagation();
  pointers.set(e.pointerId,{clientX:e.clientX,clientY:e.clientY});try{diagramScroll.setPointerCapture(e.pointerId);}catch{}
  if(pointers.size===2){cancelGesture();const [a,b]=[...pointers.values()];gesture={kind:'pinch',distance:Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY),view:copy(view),mid:{clientX:(a.clientX+b.clientX)/2,clientY:(a.clientY+b.clientY)/2}};render();return;}
  if(pointers.size>2)return;
- const p=point(e),handle=handleAt(p);gesture={kind:handle||'pan',pointerId:e.pointerId,start:{clientX:e.clientX,clientY:e.clientY},world:p,view:copy(view),before:handle?snapshot():null,moved:false};
+ const p=point(e);
+ if(tool==='draw'&&gap&&!preview){const r=plan.circuits[gap.circuit]?.route,start=drawPoints.at(-1)||r?.[gap.start];if(!start||C.dist(p,start)*view.scale>34){gesture={kind:'drawBlocked',pointerId:e.pointerId,start:{clientX:e.clientX,clientY:e.clientY},view:copy(view),moved:false};setStatus(drawPoints.length>1?'Продолжите рисование с конца фиолетовой линии.':'Начните рисовать из точки А.');return;}gesture={kind:'freeDraw',pointerId:e.pointerId,start:{clientX:e.clientX,clientY:e.clientY},world:p,view:copy(view),before:snapshot(),moved:false};return;}
+ const handle=handleAt(p);gesture={kind:handle||'pan',pointerId:e.pointerId,start:{clientX:e.clientX,clientY:e.clientY},world:p,view:copy(view),before:handle?snapshot():null,moved:false};
 }
 function showMagnifier(e,p){const r=workspace.getBoundingClientRect(),size=workspace.clientHeight<220?112:142;const left=Math.max(4,Math.min(r.width-size-4,e.clientX-r.left-size/2)),top=Math.max(4,e.clientY-r.top-size-36);magnifier.style.left=left+'px';magnifier.style.top=top+'px';magnifier.hidden=false;const side=size/(view.scale*2.5);magnifier.innerHTML=`<svg viewBox="${p.x-side/2} ${p.y-side/2} ${side} ${side}" xmlns="http://www.w3.org/2000/svg">${planSvg.innerHTML}</svg>`;}
 function motion(e){
@@ -192,7 +244,9 @@ function motion(e){
   if(pointers.size<2)return;const [a,b]=[...pointers.values()],mid={clientX:(a.clientX+b.clientX)/2,clientY:(a.clientY+b.clientY)/2},distance=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);view=copy(gesture.view);zoom(distance/Math.max(1,gesture.distance),gesture.mid);view.x-=(mid.clientX-gesture.mid.clientX)/view.scale;view.y-=(mid.clientY-gesture.mid.clientY)/view.scale;renderCanvas();return;
  }
  const dx=e.clientX-gesture.start.clientX,dy=e.clientY-gesture.start.clientY;if(Math.hypot(dx,dy)>5)gesture.moved=true;if(!gesture.moved)return;
+ if(gesture.kind==='drawBlocked')return;
  if(gesture.kind==='pan'){view.x=gesture.view.x-dx/view.scale;view.y=gesture.view.y-dy/view.scale;renderCanvas();return;}
+ if(gesture.kind==='freeDraw'){appendFree(point(e));renderCanvas();showMagnifier(e,point(e));return;}
  if(gesture.kind==='pipe'){
   const r=gesture.before.draft.plan.circuits[selection.circuit].route,h=Math.abs(r[selection.seg].y-r[selection.seg+1].y)<1e-6,delta=Math.round((h?dy:dx)/view.scale/10)*10,result=C.moveSegment(gesture.before.draft.plan,selection,delta,locks);
   if(result.ok){plan=result.plan;renderCanvas();showMagnifier(e,point(e));}
@@ -202,7 +256,9 @@ function up(e){
  if(!active||!pointers.has(e.pointerId))return;e.preventDefault();e.stopPropagation();pointers.delete(e.pointerId);magnifier.hidden=true;
  if(gesture?.kind==='pinch'){if(!pointers.size){gesture=null;scheduleSave();}return;}
  const g=gesture;if(!g)return;gesture=null;
- if(e.type==='pointercancel'){if(g.before){plan=copy(g.before.draft.plan);state.supply=copy(g.before.geometry.supply);state.returnPoint=copy(g.before.geometry.returnPoint);syncCollectors();check();render();}return;}
+ if(e.type==='pointercancel'){if(g.before){plan=copy(g.before.draft.plan);state.supply=copy(g.before.geometry.supply);state.returnPoint=copy(g.before.geometry.returnPoint);syncCollectors();if(g.kind==='freeDraw')restoreScratch(g.before.draft.scratch);check();render();}return;}
+ if(g.kind==='drawBlocked')return;
+ if(g.kind==='freeDraw'){if(!g.moved){setStatus(drawPoints.length>1?'Ведите от конца фиолетовой линии к Б.':'Зажмите в точке А и проведите линию к Б.');render();return;}appendFree(point(e),true);remember(g.before);if(!finishFreeDraw(false)){render();scheduleSave();}return;}
  if(!g.moved){tap(point(e));return;}
  if(g.before){if(JSON.stringify(g.before.draft.plan)!==JSON.stringify(plan)||JSON.stringify(g.before.geometry.supply)!==JSON.stringify(state.supply)){remember(g.before);check();scheduleSave();}render();}else scheduleSave();
 }
@@ -220,11 +276,13 @@ panel.addEventListener('click',async e=>{
  if(id==='editSetCollector'){const hit=nearestWall(centerCollector()),value=Number($('editCollectorOffset').value),[a,b]=hit.edge;if(!Number.isFinite(value)||value<30||value>C.dist(a,b)-30){setStatus('Коллектор должен помещаться на выбранной стене.',true);return;}geometryCommit(()=>placeCollector({x:a.x+(b.x-a.x)*value/C.dist(a,b),y:a.y+(b.y-a.y)*value/C.dist(a,b)}));}
  if(id==='editLock'&&selection?.type==='pipe'){remember();const c=plan.circuits[selection.circuit],r=c.route,key=C.edgeKey(r[selection.seg],r[selection.seg+1]);if(isLocked())locks=locks.filter(l=>l.circuit!==c.id||l.edge!==key);else locks.push({circuit:c.id,edge:key});render();scheduleSave();}
  if(id==='editCompare'){compare=!compare;render();}if(id==='editFit')fit();if(id==='editSaveDraft')leave(true);
+ if(id==='editAutoBypass')selectTool('rebuild');if(id==='editUseEraser')selectTool('erase');
  if(id==='editCheck'){check();render();setStatus(validation.ok?'Схема прошла проверку':issues[0]?.message,true&&!validation.ok);}
  if(id==='editCancelRange')cancelRange();
+ if(id==='editResetDraw'&&gap){remember();const r=plan.circuits[gap.circuit]?.route;drawPoints=r?[copy(r[gap.start])]:[];preview=null;render();scheduleSave();}
  if(id==='editBypass'&&range?.end!=null){e.target.disabled=true;e.target.textContent='Ищу обход…';const result=await search('bypass');setPreview(result,result.path);if(!preview)renderPanel();}
  if(id==='editReconnect'){e.target.disabled=true;e.target.textContent='Подключаю…';const result=await search('reconnect');setPreview(result,null,'reconnect');if(!preview)renderPanel();}
- if(id==='editFinishDraw'&&range?.end!=null){const r=plan.circuits[range.circuit].route,b=r[range.end];appendDraw(b,false);const path=E.clean(drawPoints);setPreview(C.replace(plan,range.circuit,range.start,range.end,path,locks),path);}
+ if(id==='editFinishDraw'&&range?.end!=null){if(gap)finishFreeDraw(true);else{const r=plan.circuits[range.circuit].route,b=r[range.end];appendDraw(b,false);const path=E.clean(drawPoints);setPreview(C.replace(plan,range.circuit,range.start,range.end,path,locks),path);}}
  if(id==='editFinishNew'&&drawPoints.length){try{const n=E.normalize(params()),ports=E.manifoldPorts(n,1,E.freeSpace(n));appendDraw(ports[0].innerReturn,false);drawPoints.push(ports[0].returnPoint);const path=E.clean(drawPoints),next=copy(plan);next.manifold=ports;next.circuits=[{id:1,route:path,core:path,supply:ports[0].supply,returnPoint:ports[0].returnPoint,bendRadiusMm:n.minBendRadiusMm,length:E.length(path)}];setPreview({ok:true,plan:next},path);}catch{setStatus('Укажите коллектор на стене.',true);}}
  if(id==='editApply'&&preview){const next=preview.plan;commit(next);cancelRange();}
 });

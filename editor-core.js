@@ -8,6 +8,19 @@ function edgeKey(a,b){return [a,b].map(p=>`${p.x},${p.y}`).sort().join('|');}
 function locksPreserved(plan,locks=[]){return locks.every(l=>{const c=plan.circuits.find(c=>c.id===l.circuit);return c&&E.segments(c.route).some(([a,b])=>edgeKey(a,b)===l.edge);});}
 function updated(plan,ci,route){const p=copy(plan),c=p.circuits[ci];c.route=copy(route);c.length=E.length(route);c.core=copy(route);c.coreLength=c.length;p.totalLength=p.circuits.reduce((s,c)=>s+E.length(c.route),0);p.manual=true;return p;}
 function nearest(plan,p,tolerance){const hits=[];plan.circuits.forEach((c,ci)=>E.segments(c.route).forEach(([a,b],seg)=>{const at=projection(p,a,b),distance=dist(p,at);if(distance<=tolerance)hits.push({circuit:ci,seg,at,distance});}));return hits.sort((a,b)=>a.distance-b.distance||a.circuit-b.circuit||a.seg-b.seg);}
+function prepareCut(plan,ci,first,second,locks=[]){
+ const c=plan.circuits[ci],r=c?.route;if(!c||!first||!second||first.circuit!==ci||second.circuit!==ci)return{ok:false,message:'Выберите две точки одного контура'};
+ const ss=E.segments(r),prefix=[0];for(const [a,b] of ss)prefix.push(prefix.at(-1)+dist(a,b));
+ const pos=h=>prefix[h.seg]+dist(r[h.seg],h.at),aPos=pos(first),bPos=pos(second),lo=Math.min(aPos,bPos),hi=Math.max(aPos,bPos);
+ if(hi-lo<1)return{ok:false,message:'Выберите две разные точки трубы'};
+ const locked=new Set(locks.filter(l=>l.circuit===c.id).map(l=>l.edge));
+ for(let i=0;i<ss.length;i++)if(locked.has(edgeKey(...ss[i]))&&Math.min(prefix[i+1],hi)-Math.max(prefix[i],lo)>1e-6)return{ok:false,message:'В выбранном участке есть закреплённая труба'};
+ const marks=[{label:'a',p:copy(first.at),pos:aPos},{label:'b',p:copy(second.at),pos:bPos}],entries=r.map((p,i)=>({p:copy(p),pos:prefix[i]})).concat(marks).sort((x,y)=>x.pos-y.pos||(x.label?1:0)-(y.label?1:0));
+ const route=[],where={};
+ for(const e of entries){if(!route.length||!same(route.at(-1),e.p))route.push(copy(e.p));if(e.label)where[e.label]=route.length-1;}
+ const start=Math.min(where.a,where.b),end=Math.max(where.a,where.b),p=updated(plan,ci,route);
+ return{ok:true,plan:p,circuit:ci,start,end,a:copy(route[start]),b:copy(route[end])};
+}
 function moveSegment(plan,selection,delta,locks=[]){
  const {circuit:ci,seg}=selection,c=plan.circuits[ci],r=copy(c.route),a=r[seg],b=r[seg+1];
  if(!a||!b||seg===0||seg>=r.length-2)return{ok:false,message:'Подключения перемещаются вместе с коллектором'};
@@ -122,5 +135,5 @@ function resizeWall(sections,edge,length){
  if(result.some(r=>r.width<50||r.height<50))throw new Error('Этот размер делает часть комнаты слишком узкой');
  return result;
 }
-return{copy,dist,same,projection,edgeKey,locksPreserved,updated,nearest,moveSegment,replace,inspect,bypass,reconnect,boundaries,resizeWall,labels};
+return{copy,dist,same,projection,edgeKey,locksPreserved,updated,nearest,prepareCut,moveSegment,replace,inspect,bypass,reconnect,boundaries,resizeWall,labels};
 });

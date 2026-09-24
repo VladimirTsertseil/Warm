@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="styles-v120.css?v=2320" />
   <link rel="stylesheet" href="styles-v24.css?v=2610">
   <link rel="stylesheet" href="notifications.css?v=261-notices">
-  <link rel="stylesheet" href="mobile-editor.css?v=261-editor">
+  <link rel="stylesheet" href="mobile-editor.css?v=261-cutdraw1">
 </head>
 <body>
   <div class="app-shell">
@@ -90,9 +90,9 @@
 
         <section id="editInspector" hidden aria-label="Выбранный объект"></section>
         <nav id="editDock" hidden aria-label="Инструменты правки">
-          <button type="button" data-edit-tool="select" aria-pressed="true"><b aria-hidden="true">↖</b>Выбрать</button>
+          <button type="button" data-edit-tool="select" aria-pressed="true"><b aria-hidden="true">↕</b>Двигать</button>
+          <button type="button" data-edit-tool="erase" aria-pressed="false"><b aria-hidden="true">✂</b>Ластик</button>
           <button type="button" data-edit-tool="draw" aria-pressed="false"><b aria-hidden="true">✎</b>Рисовать</button>
-          <button type="button" data-edit-tool="rebuild" aria-pressed="false"><b aria-hidden="true">⌁</b>Перестроить</button>
           <button type="button" data-edit-tool="more" aria-pressed="false"><b aria-hidden="true">⋯</b>Ещё</button>
         </nav>
         <nav class="editor-dock" aria-label="Инструменты">
@@ -352,7 +352,7 @@
   <script src="engine-unified.js?v=2611-obstacle-hotfix"></script>
   <script src="app-v260.js?v=261-notices"></script>
   <script src="notifications.js?v=261-notices"></script>
-  <script src="editor-core.js?v=261-editor"></script>
-  <script src="mobile-editor.js?v=261-editor"></script>
+  <script src="editor-core.js?v=261-cutdraw1"></script>
+  <script src="mobile-editor.js?v=261-cutdraw1"></script>
 </body>
 </html>
