@@ -1,4 +1,4 @@
-/* Warm 2.9.0: UI adapter for the single, independently testable planner. */
+/* Warm 2.9.1: UI adapter for the single, independently testable planner. */
 (()=>{
 'use strict';
 const Engine=globalThis.WarmEngine;
@@ -34,7 +34,7 @@ function input(){
 function evaluate(candidate,params=input()){
  const plan=candidate.plan||{circuits:candidate.route?[{route:candidate.route,supply:params.supply,returnPoint:params.returnPoint}]:[]};
  const hard=Engine.validate(params,plan),quality=hard.ok?Engine.quality(params,plan):{score:0,values:{}};
- return candidate.engineeringV260={version:'2.9.0',hardOK:hard.ok,hard,score:quality.score,quality:quality.values,proven:hard.ok};
+ return candidate.engineeringV260={version:'2.9.1',hardOK:hard.ok,hard,score:quality.score,quality:quality.values,proven:hard.ok};
 }
 function lengths(plan){return plan.circuits.map(c=>(c.length/1000).toFixed(1)).join(' + ');}
 function word(n){return n===1?'контур':n<5?'контура':'контуров';}
@@ -92,9 +92,9 @@ $('calculateLayoutV221')?.addEventListener('click',()=>v221GenerateWithChoice())
 globalThis.WarmV260={input,evaluateCandidate:evaluate,hardChecks:circuits=>Engine.validate(input(),{circuits})};
 document.querySelector('[data-layout-choice-v221="auto"] small')?.replaceChildren(document.createTextNode('Warm сам выберет проверенный вариант'));
 if($('calculateLayoutV221'))$('calculateLayoutV221').textContent='Рассчитать лучший вариант';
-document.querySelector('.eyebrow')?.replaceChildren(document.createTextNode('V2.9 · точки излома'));
-document.title='Тёплый пол — V2.9';
-const serialize=serializeState;serializeState=function(){const r=serialize();r.versionLabel='2.9.0';r.roomAdded=[...(state.roomAdded||[])];r.roomRemoved=[...(state.roomRemoved||[])];r.shapeStepMm=state.shapeStepMm;
+document.querySelector('.eyebrow')?.replaceChildren(document.createTextNode('V2.9.1 · точки излома'));
+document.title='Тёплый пол — V2.9.1';
+const serialize=serializeState;serializeState=function(){const r=serialize();r.versionLabel='2.9.1';r.roomAdded=[...(state.roomAdded||[])];r.roomRemoved=[...(state.roomRemoved||[])];r.shapeStepMm=state.shapeStepMm;
  if(state.enginePlanV1?.planner==='unified-bcd')r.unifiedPlan=structuredClone(state.enginePlanV1);
  return r;
 };

@@ -220,6 +220,12 @@ function pointTap(p){
  pointPick=null;selection=null;setStatus('Коснитесь точки излома или участка трубы.');render();
 }
 function snapEditPoint(p){return{x:Math.round(p.x/10)*10,y:Math.round(p.y/10)*10};}
+function eraseTap(p){
+ const found=C.nearest(plan,p,28/view.scale).find(h=>!cutPick||h.circuit===cutPick.circuit);if(!found){setStatus(cutPick?'Коснитесь этой же трубы.':'Коснитесь трубы в месте начала выреза.');return;}
+ if(!cutPick){cutBefore=snapshot();cutPick={circuit:found.circuit,seg:found.seg,at:copy(found.at)};selection=null;render();scheduleSave();return;}
+ const before=cutBefore||snapshot(),result=C.prepareCut(plan,cutPick.circuit,cutPick,found,locks);if(!result.ok){setStatus(result.message,true);return;}
+ plan=result.plan;range={circuit:result.circuit,start:result.start,end:result.end};gap=copy(range);cutPick=null;cutBefore=null;drawPoints=[copy(result.a)];preview=null;tool='draw';selection=null;pointPick=null;pointSpan=null;liveLine=null;remember(before);check();render();scheduleSave();setStatus('Участок вырезан. Рисуйте новый путь прямыми отрезками от А к Б.');
+}
 function rangeTap(p){
  if(!plan.circuits.length){if(tool==='draw'&&drawPoints.length){remember();appendDraw(p);renderCanvas();renderPanel();scheduleSave();}return;}
  if(range?.end!=null){if(tool==='draw'){remember();appendDraw(p);render();scheduleSave();}return;}
