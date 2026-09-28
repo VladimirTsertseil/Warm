@@ -1,0 +1,15 @@
+Warm 2.6.1 — hotfix: two obstacles in compact rectangular room
+
+Replace the files in the repository root with the files from this archive,
+preserving the tests/ subfolder.
+
+What changed:
+- thin event-sweep slivers around obstacles no longer invalidate the whole room;
+- tiny obstacle-corner remnants stay available for connector routing instead
+  of becoming separate impractically short heating circuits;
+- cache-busting query strings were changed so GitHub Pages/browser workers load
+  the corrected planner immediately;
+- added a regression test for the 4.00 x 3.00 m / two-left-obstacles case.
+
+Regression command (optional):
+  node --test tests/obstacle-regression.cjs
