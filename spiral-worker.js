@@ -1,38 +1,5 @@
-<!doctype html>
-<html lang="ru">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Warm 3.1.0 — обновление</title>
-  <style>
-    body{font:16px system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;padding:28px;max-width:650px;margin:auto;color:#0f172a}
-    .card{background:#f8fafc;border-radius:18px;padding:20px}
-    button{font:inherit;padding:12px 18px;border:0;border-radius:12px;background:#0f172a;color:#fff;cursor:pointer}
-  </style>
-</head>
-<body>
-  <div class="card">
-    <h1>Warm 3.1.0</h1>
-    <p id="status">Очищаю старый кэш приложения…</p>
-    <button id="open" hidden>Открыть Warm</button>
-  </div>
-  <script>
-    (async()=>{
-      try{
-        if('serviceWorker' in navigator){
-          for(const registration of await navigator.serviceWorker.getRegistrations()) await registration.unregister();
-        }
-        if('caches' in window){
-          for(const key of await caches.keys()) await caches.delete(key);
-        }
-        document.getElementById('status').textContent='Готово. Актуальная версия будет загружена заново.';
-      }catch(error){
-        document.getElementById('status').textContent='Откройте Warm заново. Если видна старая версия, обновите страницу без кэша.';
-      }
-      const button=document.getElementById('open');
-      button.hidden=false;
-      button.onclick=()=>location.href='./index.html?v=3100';
-    })();
-  </script>
-</body>
-</html>
+importScripts('./grid-core.js?v=310-recovery1', './engine-unified.js?v=310-recovery1', './spiral-core.js?v=310-recovery1');
+self.onmessage = ({data}) => {
+  try { self.postMessage(WarmSpiral.plan(data.project, data.settings)); }
+  catch { self.postMessage({ok: false, status: 'SPIRAL_IMPOSSIBLE', reason: 'CALCULATION_FAILED', circuits: []}); }
+};

@@ -1,79 +1,38 @@
-const assert = require('node:assert/strict'), fs = require('node:fs'), path = require('node:path'), http = require('node:http');
-const {chromium} = require('playwright');
-const root = path.resolve(process.env.WARM_TEST_ROOT || path.join(__dirname, '..'));
-(async () => {
-  const server = http.createServer((req, res) => {
-    const file = path.resolve(root, '.' + decodeURIComponent(req.url.split('?')[0]));
-    if (!file.startsWith(root + path.sep)) {res.writeHead(403).end(); return;}
-    try {res.setHeader('Content-Type', file.endsWith('.js') ? 'text/javascript' : file.endsWith('.css') ? 'text/css' : 'text/html'); res.end(fs.readFileSync(file));}
-    catch {res.writeHead(404).end();}
-  });
-  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve)); let browser;
-  try {
-    browser = await chromium.launch({headless: true, ...(process.env.WARM_BROWSER ? {executablePath: process.env.WARM_BROWSER} : {})});
-    for (const mobile of [false, true]) {
-      const page = await browser.newPage({viewport: mobile ? {width: 390, height: 844} : {width: 1280, height: 900}, isMobile: mobile, hasTouch: mobile});
-      const errors = []; page.on('pageerror', e => errors.push(e.message));
-      await page.goto(`http://127.0.0.1:${server.address().port}/index.html`);
-      await page.locator('#createFirstBtn').click(); await page.waitForSelector('#shapeSheet.open'); await page.locator('#doneShapeV24').click();
-      await page.locator('#generateBtn').click(); await page.locator('#calculateSpiralV31').click();
-      assert.equal(await page.locator('#spiralRadiusInput').inputValue(), '');
-      assert.equal(await page.evaluate(() => WarmV310.plan), null);
-      assert.match(await page.locator('#status').innerText(), /радиус/);
-      await page.locator('#spiralRadiusInput').fill('60'); await page.locator('#calculateSpiralV31').click();
-      await page.waitForFunction(() => !state.engineBusyV1);
-      assert.equal(await page.evaluate(() => WarmV310.plan?.status), 'SPIRAL_OK');
-      assert.equal(await page.locator('.grid-spiral-v31').count(), 1);
-      assert.match(await page.locator('.grid-spiral-supply').getAttribute('d'), / A 60 60 /);
-      assert.match(await page.locator('#gridInfo').innerText(), /без подводов/);
-      assert.equal(await page.locator('#manualToolBtn').isDisabled(), true);
-      const result = await page.evaluate(() => WarmV310.plan);
-      if (process.env.WARM_SCREENSHOTS) {
-        fs.mkdirSync(process.env.WARM_SCREENSHOTS, {recursive: true});
-        await page.screenshot({path: path.join(process.env.WARM_SCREENSHOTS, `spiral-${mobile ? 'mobile' : 'desktop'}.png`)});
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Warm 3.1.0 — обновление</title>
+  <style>
+    body{font:16px system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;padding:28px;max-width:650px;margin:auto;color:#0f172a}
+    .card{background:#f8fafc;border-radius:18px;padding:20px}
+    button{font:inherit;padding:12px 18px;border:0;border-radius:12px;background:#0f172a;color:#fff;cursor:pointer}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Warm 3.1.0</h1>
+    <p id="status">Очищаю старый кэш приложения…</p>
+    <button id="open" hidden>Открыть Warm</button>
+  </div>
+  <script>
+    (async()=>{
+      try{
+        if('serviceWorker' in navigator){
+          for(const registration of await navigator.serviceWorker.getRegistrations()) await registration.unregister();
+        }
+        if('caches' in window){
+          for(const key of await caches.keys()) await caches.delete(key);
+        }
+        document.getElementById('status').textContent='Готово. Актуальная версия будет загружена заново.';
+      }catch(error){
+        document.getElementById('status').textContent='Откройте Warm заново. Если видна старая версия, обновите страницу без кэша.';
       }
-      // Save through the real UI and reopen in a fresh page.
-      await page.locator('#settingsBtn').click(); await page.locator('#nameInput').fill('Улитка 3.1');
-      const downloadEvent = page.waitForEvent('download'); await page.locator('#shareBtn').click();
-      const download = await downloadEvent, png = fs.readFileSync(await download.path());
-      assert.equal(png.subarray(1, 4).toString(), 'PNG'); assert.equal(png.readUInt32BE(16), 1600);
-      if (process.env.WARM_SCREENSHOTS) await download.saveAs(path.join(process.env.WARM_SCREENSHOTS, `spiral-export-${mobile ? 'mobile' : 'desktop'}.png`));
-      await page.locator('#saveBtn').click();
-      const saved = await page.evaluate(() => JSON.parse(localStorage.getItem(STORAGE_KEY))[0]);
-      assert.equal(saved.versionLabel, '3.1.0'); assert.equal(saved.routeComplete, false);
-      assert.deepEqual(saved.projectV3.circuits, result.circuits);
-      await page.reload(); await page.getByRole('button', {name: 'Открыть', exact: true}).click();
-      assert.deepEqual(await page.evaluate(() => WarmV310.plan), result);
-      // Invalid stored arc must not be displayed as a verified route.
-      await page.evaluate(raw => {raw.gridSpiralPlanV31.circuits[0].segments.find(s => s.type === 'curve').radiusMm = 1; loadScheme(raw);}, saved);
-      assert.equal(await page.evaluate(() => WarmV310.plan), null);
-      assert.equal(await page.locator('.grid-spiral-v31').count(), 0);
-      await page.evaluate(raw => loadScheme(raw), saved);
-      // Room editor still works and invalidates the old result.
-      await page.locator('#shapeToolBtn').click(); await page.locator('#shapeWidthInput').fill('4.50'); await page.locator('#doneShapeV24').click();
-      assert.equal(await page.evaluate(() => WarmV310.plan), null);
-      await page.locator('#generateBtn').click(); await page.locator('#calculateSpiralV31').click(); await page.waitForFunction(() => !state.engineBusyV1);
-      assert.equal(await page.evaluate(() => WarmV310.plan?.status), 'SPIRAL_OK');
-      // A cancelled worker cannot publish a route into a changed/new project.
-      await page.evaluate(() => {WarmV310.calculate(); newScheme();});
-      await page.waitForSelector('#shapeSheet.open'); await page.locator('#doneShapeV24').click();
-      assert.equal(await page.evaluate(() => WarmV310.plan), null);
-      assert.equal(await page.evaluate(() => state.engineBusyV1), false);
-      assert.equal(await page.evaluate(() => WarmV310.settings.radiusMm), null);
-      // Grid, spacing and radius controls remain usable on a narrow screen.
-      await page.locator('#generateBtn').click(); await page.locator('#spiralRadiusInput').fill('80'); await page.locator('#calculateSpiralV31').click();
-      await page.waitForFunction(() => !state.engineBusyV1); assert.equal(await page.evaluate(() => WarmV310.plan), null);
-      assert.match(await page.locator('#status').innerText(), /радиус не помещается/);
-      await page.locator('#generateBtn').click(); await page.locator('#spiralSpacingInput').fill('2'); await page.locator('#calculateSpiralV31').click();
-      await page.waitForFunction(() => !state.engineBusyV1); assert.equal(await page.evaluate(() => WarmV310.plan?.status), 'SPIRAL_OK');
-      // Legacy calculation is an explicit separate action, never a silent fallback.
-      await page.locator('#generateBtn').click(); await page.locator('#legacyCalculationV31').click();
-      await page.waitForSelector('#layoutChooserSheetV221.open'); assert.equal(await page.evaluate(() => WarmV310.plan), null);
-      assert.equal(await page.locator('#manualToolBtn').isDisabled(), false);
-      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
-      assert.deepEqual(errors, []);
-      console.log(`PASS ${mobile ? 'mobile' : 'desktop'} spiral worker / radius / PNG / save-reload / corrupted arc / shape / cancellation / explicit legacy mode`);
-      await page.close();
-    }
-  } finally {if (browser) await browser.close(); server.close();}
-})().catch(e => {console.error(e); process.exitCode = 1;});
+      const button=document.getElementById('open');
+      button.hidden=false;
+      button.onclick=()=>location.href='./index.html?v=310-recovery1';
+    })();
+  </script>
+</body>
+</html>

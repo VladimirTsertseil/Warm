@@ -1,54 +1,169 @@
-/* Regression: draw an off-grid column through the real editor and calculate it.
-   WARM_TEST_ROOT may point to an older compatible UI with the patched adapter. */
-const assert=require('node:assert/strict'),{chromium}=require('playwright');
-const fs=require('node:fs'),path=require('node:path'),http=require('node:http');
-const root=path.resolve(process.env.WARM_TEST_ROOT||path.join(__dirname,'..')),E=require(path.join(root,'engine-unified.js'));
-(async()=>{
- const server=http.createServer((req,res)=>{const file=path.resolve(root,'.'+decodeURIComponent(req.url.split('?')[0]));if(!file.startsWith(root+path.sep)){res.writeHead(403).end();return;}try{res.setHeader('Content-Type',file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html');res.end(fs.readFileSync(file));}catch{res.writeHead(404).end();}});
- await new Promise(r=>server.listen(0,'127.0.0.1',r));let browser;
- try{
-  browser=await chromium.launch({headless:true,...(process.env.WARM_BROWSER?{executablePath:process.env.WARM_BROWSER}:{})});
-  const page=await browser.newPage({viewport:{width:390,height:844},hasTouch:true,isMobile:true}),errors=[];page.on('pageerror',e=>errors.push(e.message));
-  await page.goto(`http://127.0.0.1:${server.address().port}/index.html`);await page.evaluate(()=>newScheme());await page.waitForSelector('#shapeSheet.open');await page.evaluate(()=>{closeSheetV5();state.supply={x:600,y:3000,side:'bottom'};state.returnPoint={x:650,y:3000,side:'bottom'};state.pipeStepMm=150;state.pipeDiameterMm=16;state.wallOffsetMm=100;state.maxCircuitLengthM=100;state.bendRadiusMode='auto';syncInputs();syncBendUiV10();renderPlan();});
-  await page.locator('#obstacleToolBtn').click();
-  const screen=async p=>page.evaluate(p=>{const m=planSvg.getScreenCTM();return{x:m.a*p.x+m.c*p.y+m.e,y:m.b*p.x+m.d*p.y+m.f};},p);
-  const a=await screen({x:1730,y:1170}),b=await screen({x:2180,y:1720});
-  await page.mouse.move(a.x,a.y);await page.mouse.down();await page.mouse.move(b.x,b.y,{steps:4});await page.mouse.up();
-  const drawn=await page.evaluate(()=>({physical:state.obstacles.map(({x,y,width,height})=>({x,y,width,height})),input:WarmV260.input(),mask:state.excluded.size}));
-  assert.deepEqual(drawn.physical,[{x:1730,y:1170,width:450,height:550}]);assert.ok(drawn.mask>0,'exercise the real raster mask');assert.deepEqual(drawn.input.obstacles,drawn.physical,'derived cells must not widen the physical column');
-  console.log('PASS real column gesture / exact obstacle footprint');
-
-  const masks=await page.evaluate(()=>{
-   const saved={obstacles:structuredClone(state.obstacles),grid:state.gridStepMm,excluded:new Set(state.excluded)},results=[];
-   // Centimetre snapping has several phases relative to the visual grid.
-   for(const grid of [20,50,100])for(const dx of [0,10,20,30,40])for(const dy of [0,10,20,30,40]){
-    state.gridStepMm=grid;state.obstacles=[{id:'column',x:1700+dx,y:1100+dy,width:450,height:550}];syncExcludedFromObstaclesV6();
-    results.push({grid,dx,dy,expected:state.obstacles.map(({x,y,width,height})=>({x,y,width,height})),actual:WarmV260.input().obstacles});
-   }
-   const extras=[];
-   for(const obstacles of [[{x:0,y:1130,width:430,height:560}],[{x:1130,y:1270,width:430,height:550},{x:2710,y:930,width:470,height:560}],[{x:1530,y:1170,width:450,height:550},{x:1730,y:1330,width:610,height:420}]]){
-    state.gridStepMm=50;state.obstacles=obstacles;syncExcludedFromObstaclesV6();extras.push({actual:WarmV260.input().obstacles,expected:WarmEngine.decomposition(obstacles)});
-   }
-   state.obstacles=saved.obstacles;state.gridStepMm=saved.grid;syncExcludedFromObstaclesV6();state.excluded.add('2,2');state.roomRemoved.add('30,20');
-   const independent=WarmV260.input();state.roomRemoved.clear();state.excluded=saved.excluded;
-   return{results,extras,independent};
-  });
-  for(const c of masks.results)assert.deepEqual(c.actual,c.expected,JSON.stringify({grid:c.grid,dx:c.dx,dy:c.dy}));
-  for(const c of masks.extras)assert.deepEqual(c.actual,c.expected);
-  assert.ok(masks.independent.obstacles.some(r=>r.x===100&&r.y===100&&r.width===50&&r.height===50),'independent painted exclusions must survive');
-  assert.ok(masks.independent.obstacles.some(r=>r.x===3000&&r.y===2000&&r.width===100&&r.height===100),'removed room cells must survive');
-  console.log('PASS 75 grid phases / wall obstacle / two obstacles / overlapping obstacles / independent painted cells');
-
-  for(const pattern of process.env.WARM_COLUMNS_SMOKE?['spiral']:['auto','snake','double-snake','spiral','adaptive']){
-   await page.locator('#generateBtn').click();await page.locator('#legacyCalculationV31').click();await page.locator(`[data-layout-choice-v221="${pattern}"]`).click();await page.locator('#calculateLayoutV221').click();await page.waitForFunction(()=>!state.engineBusyV1,null,{timeout:305000});
-   const result=await page.evaluate(()=>({ok:state.routeComplete,input:WarmV260.input(),plan:state.enginePlanV1,status:document.getElementById('status').textContent,candidates:state.routeCandidates.length}));
-   assert.equal(result.ok,true,JSON.stringify({pattern,status:result.status}));assert.equal(result.candidates,1);if(pattern!=='auto')assert.equal(result.plan.kind,pattern);
-   const exact={...result.input,obstacles:drawn.physical};assert.equal(E.validate(exact,result.plan).ok,true);assert.ok(result.plan.quality.coverage>=.8,'reasonable coverage around the column');
-   for(const c of result.plan.circuits){assert.deepEqual(c.route[0],c.supply);assert.deepEqual(c.route.at(-1),c.returnPoint);assert.ok(E.length(c.route)<=exact.maxCircuitLengthMm);const curve=E.rounded(c.route,c.bendRadiusMm);assert.ok(curve);for(const part of curve.primitives)for(const q of part.points){assert.ok(q.x>=0&&q.y>=0&&q.x<=4000&&q.y<=3000);assert.ok(!drawn.physical.some(o=>q.x>o.x&&q.x<o.x+o.width&&q.y>o.y&&q.y<o.y+o.height),'rounded pipe enters column');}}
-   console.log('PASS off-grid column',pattern,`coverage ${(result.plan.quality.coverage*100).toFixed(1)}%`,`${(result.plan.totalLength/1000).toFixed(1)} m`);
-   if(process.env.WARM_SCREENSHOTS&&pattern==='spiral'){fs.mkdirSync(process.env.WARM_SCREENSHOTS,{recursive:true});await page.screenshot({path:path.join(process.env.WARM_SCREENSHOTS,'column-fixed.png')});}
+/* Warm 3.1: isolated grid-spiral workflow. Legacy routes/editor remain explicit. */
+(() => {
+  'use strict';
+  const S = WarmSpiral, copy = value => structuredClone(value);
+  const defaults = () => ({radiusMm: null, spacingCells: 1, wallOffsetMm: 100});
+  state.spiralSettingsV31 = defaults(); state.spiralPlanV31 = null;
+  let generation = 0, worker = null, cancelPending = null, savedKey = '';
+  const project = () => WarmV300.project();
+  const signature = () => {const p = project(); return JSON.stringify([p.room, p.grid, p.exclusions, p.collector, p.pipe, state.spiralSettingsV31]);};
+  const messages = {
+    RADIUS_REQUIRED: 'Укажите радиус поворота вручную — правила для диаметра трубы пока не заданы.',
+    INVALID_SPACING: 'Шаг должен быть целым числом ячеек, не меньше одной.',
+    INVALID_OFFSET: 'Отступ должен быть неотрицательным числом.',
+    RADIUS_DOES_NOT_FIT: 'Заданный радиус не помещается между проходами. Увеличьте шаг по сетке или проверьте допустимый радиус трубы.',
+    DISCONNECTED_OR_EMPTY_GRID: 'В этой зоне нет связной монтажной сетки для выбранного шага и отступа. Проверьте узкие проходы и отдельные участки.',
+    NO_VALID_SPIRAL: 'Для этой формы и параметров корректная улитка не найдена. Проверьте проходы, исключения и шаг.',
+    AREA_TOO_LARGE: 'Область слишком велика для одного расчёта. Разделите рабочую зону.',
+    TIMEOUT: 'Расчёт не завершился за отведённое время. Уменьшите рабочую зону и повторите.'
+  };
+  function syncSettings() {
+    $('spiralRadiusInput').value = state.spiralSettingsV31.radiusMm ?? '';
+    $('spiralSpacingInput').value = state.spiralSettingsV31.spacingCells;
+    $('spiralOffsetInput').value = state.spiralSettingsV31.wallOffsetMm;
+    $('spiralPitchInfo').textContent = `Сетка ${state.mountingGridV3.cellSizeMm} мм · проходы через ${state.mountingGridV3.cellSizeMm * state.spiralSettingsV31.spacingCells} мм`;
   }
-  const restored=await page.evaluate(()=>{const raw=serializeState();loadScheme(raw);return{obstacles:WarmV260.input().obstacles,ok:state.routeComplete&&WarmEngine.validate(WarmV260.input(),state.enginePlanV1).ok};});assert.deepEqual(restored.obstacles,drawn.physical);assert.equal(restored.ok,true);
-  assert.deepEqual(errors,[]);console.log('PASS save / reload / common validation / console');
- }finally{await browser?.close();server.close();}
-})().catch(e=>{console.error(e);process.exitCode=1;});
+  function cancel() {
+    generation++; worker?.terminate(); worker = null; cancelPending?.(); cancelPending = null;
+    state.engineBusyV1 = false;
+  }
+  const resetBase = resetRoute;
+  resetRoute = function(...args) {cancel(); state.spiralPlanV31 = null; savedKey = ''; return resetBase(...args);};
+
+  function summary(plan) {
+    const length = (plan.lengthMm / 1000).toFixed(1).replace('.', ',');
+    return `Улитка · ${length} м без подводов${plan.overLength ? ' · более 80 м, требуется разделение' : ''}`;
+  }
+  function draw() {
+    let plan = state.spiralPlanV31;
+    if (plan && signature() !== savedKey) {state.spiralPlanV31 = null; plan = null;}
+    $('manualToolBtn').disabled = !!plan;
+    $('manualToolBtn').title = plan ? 'Редактирование сеточной трубы появится на этапе 3.4' : 'Правка прежнего маршрута';
+    if (!plan || WarmEditor.active) return;
+    const c = plan.circuits[0], half = c.lengthMm / 2, scale = state.scale || .1;
+    const width = state.pipeRenderMode === 'scheme' ? 2.5 / scale : state.pipeDiameterMm;
+    planSvg.insertAdjacentHTML('beforeend', `<g class="grid-spiral-v31" pointer-events="none"><title>Рабочая улитка. Подключение к коллектору не построено.</title><path d="${S.svgPath(c.segments)}" fill="none" stroke="white" stroke-width="${width + 2 / scale}"/><path class="grid-spiral-supply" d="${S.pathRange(c.segments, 0, half)}" fill="none" stroke="#dc4c43" stroke-width="${width}"/><path class="grid-spiral-return" d="${S.pathRange(c.segments, half, c.lengthMm)}" fill="none" stroke="#2673c7" stroke-width="${width}"/><circle cx="${c.entry.x}" cy="${c.entry.y}" r="${4 / scale}" fill="#dc4c43"><title>Начало рабочей части</title></circle><circle cx="${c.exit.x}" cy="${c.exit.y}" r="${4 / scale}" fill="#2673c7"><title>Конец рабочей части</title></circle></g>`);
+    $('routeInfo').textContent = summary(plan);
+    $('gridInfo').textContent = summary(plan);
+    $('spiralResultV31').textContent = `${summary(plan)}. Подводы к коллектору будут добавлены на этапе 3.2.`;
+  }
+  const renderBase = renderPlan;
+  renderPlan = function(...args) {renderBase(...args); draw();};
+  const legacyExport = exportPng;
+  $('shareBtn').removeEventListener('click', legacyExport);
+  exportPng = async function() {
+    if (!state.spiralPlanV31) return legacyExport();
+    renderPlan();
+    if (!state.spiralPlanV31) {setStatus('Параметры изменились. Сначала пересчитайте улитку.', true); return;}
+    const caption = summary(state.spiralPlanV31), clone = planSvg.cloneNode(true);
+    // External styles do not travel with an SVG blob: preserve the visible room/grid.
+    const originals = [planSvg, ...planSvg.querySelectorAll('*')], copies = [clone, ...clone.querySelectorAll('*')];
+    const properties = ['fill', 'fill-opacity', 'stroke', 'stroke-width', 'stroke-opacity', 'stroke-dasharray', 'stroke-linecap', 'stroke-linejoin', 'opacity', 'font-family', 'font-size', 'font-weight', 'text-anchor', 'dominant-baseline', 'visibility', 'display'];
+    originals.forEach((element, i) => {const style = getComputedStyle(element); properties.forEach(p => copies[i].style.setProperty(p, style.getPropertyValue(p)));});
+    clone.setAttribute('xmlns', SVG_NS);
+    const box = planSvg.viewBox.baseVal, width = 1600, height = Math.round(width * box.height / box.width);
+    clone.setAttribute('width', width); clone.setAttribute('height', height);
+    const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(clone)], {type: 'image/svg+xml;charset=utf-8'}));
+    try {
+      const img = new Image();
+      await new Promise((resolve, reject) => {img.onload = resolve; img.onerror = reject; img.src = url;});
+      const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height + 84;
+      const context = canvas.getContext('2d'); context.fillStyle = '#ffffff'; context.fillRect(0, 0, canvas.width, canvas.height); context.drawImage(img, 0, 0, width, height);
+      context.fillStyle = '#172534'; context.font = '24px sans-serif'; context.fillText(caption, 24, height + 32);
+      context.font = '20px sans-serif'; context.fillText('Рабочая часть. Подключение к коллектору пока не построено.', 24, height + 62);
+      const png = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+      if (!png) throw new Error('PNG_FAILED');
+      const downloadUrl = URL.createObjectURL(png), link = document.createElement('a');
+      link.href = downloadUrl; link.download = `${state.name || 'warm-spiral-3.1'}.png`; link.click();
+      setTimeout(() => URL.revokeObjectURL(downloadUrl), 1500); setStatus('Изображение улитки сохранено. Длина указана без подводов.');
+    } catch {setStatus('Не удалось создать PNG. Повторите экспорт.', true);}
+    finally {URL.revokeObjectURL(url);}
+  };
+  $('shareBtn').addEventListener('click', () => exportPng());
+  function open() {
+    if (WarmEditor.active) manualExitV2A();
+    syncSettings();
+    $('spiralResultV31').textContent = state.spiralPlanV31 ? `${summary(state.spiralPlanV31)}. Подключение к коллектору пока не построено.` : 'Одна рабочая улитка. Подводы к коллектору — следующий этап.';
+    openSheetV5('spiralSheetV31');
+  }
+  const oldGenerate = $('generateBtn'); oldGenerate.replaceWith(oldGenerate.cloneNode(true));
+  $('generateBtn').addEventListener('click', open);
+  $('generateBtn').querySelector('span:last-child').textContent = 'Улитка';
+  $('closeSpiralV31').addEventListener('click', () => closeSheetV5());
+  $('legacyCalculationV31').addEventListener('click', () => {resetRoute(); closeSheetV5(); renderPlan(); v221OpenChooser();});
+  for (const [id, field] of [['spiralRadiusInput', 'radiusMm'], ['spiralSpacingInput', 'spacingCells'], ['spiralOffsetInput', 'wallOffsetMm']]) {
+    $(id).addEventListener('change', () => {
+      const value = $(id).value === '' ? null : Number($(id).value);
+      if (value === state.spiralSettingsV31[field]) return;
+      pushHistoryV5(); state.spiralSettingsV31[field] = value;
+      resetRoute(); syncSettings(); renderPlan();
+    });
+  }
+  const snapshotBase = snapshotV5;
+  snapshotV5 = function() {return {...snapshotBase(), spiralSettingsV31: copy(state.spiralSettingsV31)};};
+  $('undoBtn').addEventListener('click', () => {const s = historyV5.at(-1); if (!WarmEditor.active && s?.spiralSettingsV31) {state.spiralSettingsV31 = copy(s.spiralSettingsV31); syncSettings();}}, true);
+  function calculateInWorker(p, settings) {
+    return new Promise((resolve, reject) => {
+      worker = new Worker('./spiral-worker.js?v=310-recovery1');
+      const w = worker;
+      const finish = (error, result) => {clearTimeout(timer); w.terminate(); if (worker === w) {worker = null; cancelPending = null;} error ? reject(error) : resolve(result);};
+      const timer = setTimeout(() => finish(new Error('TIMEOUT')), 30000);
+      cancelPending = () => finish(null, null);
+      w.onmessage = event => finish(null, event.data);
+      w.onerror = () => finish(new Error('CALCULATION_FAILED'));
+      w.postMessage({project: p, settings});
+    });
+  }
+  async function calculate() {
+    if (state.engineBusyV1) return;
+    // Explicit radius is required even if the legacy automatic radius is present.
+    const settings = copy(state.spiralSettingsV31);
+    if (!(Number.isFinite(settings.radiusMm) && settings.radiusMm > 0)) {setStatus(messages.RADIUS_REQUIRED, true); $('spiralRadiusInput').focus(); return;}
+    if (WarmEditor.active) manualExitV2A();
+    resetRoute(); state.editorDraft = null; state.manualV2 = blankManualStateV2A();
+    const p = project(), inputKey = signature(), request = ++generation;
+    closeSheetV5(); state.engineBusyV1 = true; renderPlan(); setStatus('Строю улитку по монтажной сетке…', false, {kind: 'progress'});
+    try {
+      const result = await calculateInWorker(p, settings);
+      if (request !== generation) return;
+      if (inputKey !== signature()) {setStatus('Параметры изменились. Повторите расчёт.', true); return;}
+      if (!result?.ok) {setStatus(messages[result?.reason] || 'Корректная улитка не найдена. Измените параметры рабочей зоны.', true); return;}
+      // Recheck the worker result before showing it or allowing it to be saved.
+      if (!S.validate(p, settings, result).ok) {setStatus('Улитка не прошла проверку геометрии.', true); return;}
+      state.spiralPlanV31 = result; savedKey = inputKey;
+      state.routeComplete = false; // The collector transits do not exist in this stage.
+      renderPlan(); setStatus(`${summary(result)}. Подключение к коллектору пока не построено.`, result.overLength);
+    } catch (e) {if (request === generation) setStatus(messages[e.message] || 'Расчёт не завершён. Повторите попытку.', true);}
+    finally {if (request === generation) state.engineBusyV1 = false;}
+  }
+  $('calculateSpiralV31').addEventListener('click', calculate);
+  const serializeBase = serializeState;
+  serializeState = function() {
+    const raw = serializeBase(); raw.versionLabel = '3.1.0'; raw.spiralSettingsV31 = copy(state.spiralSettingsV31);
+    if (state.spiralPlanV31 && signature() === savedKey) {
+      raw.gridSpiralPlanV31 = copy(state.spiralPlanV31); raw.projectV3.circuits = copy(state.spiralPlanV31.circuits);
+      raw.route = []; raw.routeComplete = false; delete raw.unifiedPlan; delete raw.editorDraft; delete raw.manualPlanV2;
+    }
+    return raw;
+  };
+  const loadBase = loadScheme;
+  loadScheme = function(raw) {
+    cancel(); state.spiralPlanV31 = null; savedKey = '';
+    state.spiralSettingsV31 = raw.spiralSettingsV31 ? {...defaults(), ...copy(raw.spiralSettingsV31)} : defaults();
+    loadBase(raw);
+    if (raw.gridSpiralPlanV31) {
+      if (S.validate(project(), state.spiralSettingsV31, raw.gridSpiralPlanV31).ok) {
+        state.spiralPlanV31 = copy(raw.gridSpiralPlanV31); savedKey = signature(); state.routeComplete = false;
+      } else setStatus('Сохранённая улитка не прошла проверку. Рассчитайте её заново.', true);
+    }
+    syncSettings(); renderPlan();
+  };
+  const newBase = newScheme;
+  newScheme = function() {cancel(); state.spiralPlanV31 = null; savedKey = ''; state.spiralSettingsV31 = defaults(); newBase(); syncSettings();};
+  // Legacy methods invoked from their own dialog cannot coexist with a displayed spiral.
+  const legacyGenerate = v221GenerateWithChoice;
+  v221GenerateWithChoice = async function(...args) {state.spiralPlanV31 = null; savedKey = ''; return legacyGenerate(...args);};
+  document.title = 'Тёплый пол — V3.1'; document.querySelector('.eyebrow').textContent = 'V3.1 · улитка по сетке';
+  globalThis.WarmV310 = {calculate, open, get plan() {return state.spiralPlanV31;}, get settings() {return copy(state.spiralSettingsV31);}};
+  syncSettings();
+})();

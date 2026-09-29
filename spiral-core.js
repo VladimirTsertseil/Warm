@@ -1,346 +1,322 @@
-# CHANGELOG — Warm
-
-## 3.1.0 — улитка по монтажной сетке, 29 сентября 2026
-
-- Новое ядро одной рабочей улитки: направляющие сетки, отдельные прямые и круговые
-  дуги, длина с учётом дуг, независимый расчёт в Web Worker.
-- Радиус задаётся вручную, шаг — числом ячеек; правила радиусов по диаметру и
-  автоматический выбор числа контуров не введены. Превышение 80 м отмечается.
-- Проверки непрерывности, пересечений, границ и исключений включают всю дугу.
-  Несвязанные зоны и неподдержанные узкие проходы возвращают отказ без частичного маршрута.
-- Сохранение и проверка при повторном открытии; экспорт PNG с пометкой «без подводов».
-  Изменение геометрии отменяет устаревший результат. Форма и прежняя ручная правка сохранены.
-- Прежние методы доступны отдельной кнопкой. Подводы к коллектору и двойная змейка
-  по новой сетке остаются этапом 3.2; несколько сеточных контуров и ручная правка — 3.3/3.4.
-- Добавлены тесты геометрии и браузера для компьютера и телефона. Подробнее:
-  `docs/WARM-3.1.md`; установка патча: `UPDATE-3.1.txt`.
-
-## 3.0.0 — монтажная сетка, 28 сентября 2026
-
-- Отдельные Room, Grid, Exclusions, Collector и динамический список Circuits; единицы — мм.
-- Сетка 100/150/200 мм, труба 16/17/20 мм; доступность узлов и целых направляющих,
-  привязанный к рёбрам прямой сегмент, независимость размера комнаты от размера ячейки.
-- Отображение сетки в прежнем редакторе, сохранение `projectV3`, миграция точных препятствий,
-  старых клеток и маршрутов, отмена смены параметров, совместимость ручных черновиков.
-- Начальный лимит длины для новой схемы — 80 м. Правила радиуса и автовыбор числа
-  контуров в новое ядро не добавлены. Старый решатель сохранён как режим совместимости.
-- Восстановлены папки тестов и GitHub Actions. Добавлены проверки ядра и браузера.
-- Известные исходные сбои и подробный план следующих этапов: `docs/WARM-3-PLAN.md`.
-
-История изменений собрана из отдельных файлов CHANGELOG-* при очистке проекта V2.4.2.
-
-## 2.6.1 — правка на телефоне, 23 сентября 2026
-
-- Прямой вход в правку плана; четыре нижних инструмента и постоянные «Отменить», «Повторить», «Готово». Дублирующие окно и боковая панель скрыты.
-- Выбор трубы без случайного сдвига, отдельный маркер, лупа, шаги ±10 мм, точное расстояние до стены и переключение между близкими проходами.
-- Разделены панорамирование, перенос объекта и масштабирование. Второй палец отменяет незавершённый перенос. Исправлено вписывание комнаты в узкий экран.
-- Локальный обход/перерисовка А–Б с пунктирным предварительным результатом и защитой закреплённых участков. Поиск работает в отдельном worker, результат устаревшего запроса не применяется.
-- Размеры стен и препятствий доступны на плане. Коллектор перемещается одним объектом с привязкой к стене и отдельным проверенным переподключением. Изменение размеров сохраняет просмотр.
-- Общий валидатор H1–H7 для автоматической и ручной схемы, подсветка ошибок, сохранение черновика, автосохранение и восстановление истории/незавершённого рисования.
-- Убраны мелкие детали в общем виде; свойства открываются под планом. Сохранены короткие уведомления вне чертежа. Исправлена ссылка на существующий manifest.
-- Добавлены 8 чистых проверок и браузерные регрессии правки, подключён CI для интерфейса. Версия остаётся 2.6.1; генератор автоматической раскладки не менялся.
-
-## 2.6.1 — уведомления на телефоне, 23 сентября 2026
-
-- Сообщения и подсказки вынесены из области чертежа в постоянную строку под верхней панелью. Появление сообщения не перемещает план.
-- Обычные сообщения исчезают через 2 секунды, ошибки — через 4. Повторы не продлевают показ; новые сообщения заменяют старые без очереди.
-- Добавлены закрытие крестиком, скрытие при начале жеста и просмотр полного текста последнего сообщения по кнопке `?`.
-- Индикатор расчёта остаётся до завершения или отмены; повторный запуск и загрузка схемы не оставляют устаревшее сообщение.
-- Нижние панели не перекрывают строку сообщений. Проверены телефон 360/390 px, альбомная ориентация и компьютер, таймеры, жесты и доступность полного текста.
-- Версия и математический движок не изменены. Тест интерфейса: `node tests/notifications.cjs`.
-
----
-
-# Warm V2.4.2
-
-## Двойная змейка для сложной ортогональной формы
-
-- Двойная змейка больше не ограничена простым прямоугольником.
-- Для Г-, Т-образных и комнат с угловыми вырезами Warm строит поперечные профили реальной свободной области.
-- Если каждый профиль представляет один непрерывный свободный отрезок, строится единая встречная двойная змейка с чередованием подачи и обратки по всей площади.
-- Автоматически проверяются обе ориентации и четыре фазы сетки.
-- Переходы возле вогнутых углов прокладываются только через свободный коридор и проходят существующую геометрическую проверку.
-- Если препятствие разрывает проход на несколько независимых частей, глобальная двойная змейка не форсируется — остаётся Комбинированный/multi-cell вариант.
-- Auto теперь учитывает двойную змейку и для сложных угловых форм.
-- Три основных класса остаются: Змейка, Двойная змейка, Улитка; четвёртый — Комбинированный.
-
-V2.4.1 (вырезы по углам и размеры остатка стены) сохранена без изменений.
-
----
-
-# Warm V2.4.1 — остаток стены у углового выреза
-
-## Изменено
-- Для верхних и нижних угловых вырезов на плане показывается дополнительный размер оставшегося прямого участка стены.
-- Значение обновляется в реальном времени при перетаскивании синей ручки ширины выреза.
-- Если на одной стене два выреза, показывается фактический участок стены между ними: ширина комнаты минус оба выреза.
-- Плашка имеет тот же инженерный стиль, что и остальные размеры, но не является отдельным геометрическим параметром — она вычисляется автоматически.
-
-## Не изменено
-- Размер выреза и его глубина остаются независимыми параметрами.
-- Внешний размер комнаты не меняется при работе с вырезом.
-- Оптимизатор, препятствия, коллектор и укладка трубы не затронуты.
-
----
-
-# Warm V2.4 — новый редактор формы
-
-- Любая новая комната начинается с прямоугольника.
-- Отдельные режимы «Г-образная» и «Т-образная» удалены из интерфейса.
-- Можно добавить до четырёх независимых прямоугольных вырезов — по одному из каждого угла.
-- Для каждого выреза отдельно задаются ширина и глубина; разные стороны больше не связаны общей высотой.
-- Вырезы имеют предсказуемые осевые ручки: ширина двигается только по горизонтали, глубина — только по вертикали.
-- Размеры вырезов отображаются непосредственно на плане; нажатие по размеру открывает соответствующее точное поле ввода.
-- Изменение выреза не меняет внешнюю ширину/высоту комнаты.
-- Геометрически невозможные и пересекающиеся вырезы блокируются.
-- В нижнем окне формы убраны кнопки 0°/90°/180°/270°. Оставлена одна команда «Повернуть» на 90°.
-- Удалён постоянный поясняющий текст из окна формы.
-- Добавлена явная кнопка «Готово».
-- Старые прямоугольные, Г- и Т-образные сохранения автоматически мигрируют в новую модель, когда их геометрию можно представить угловыми вырезами. Непредставимые старые custom-формы остаются legacy.
-- Для классической Г-формы и симметричной Т-подобной формы сохранена возможность локальной улитки, когда геометрия раскладывается на две подходящие прямоугольные области.
-
----
-
-# Warm V2.3.2
-
-Patch поверх полного проекта V2.3.1. Скопируйте содержимое архива в корень проекта с заменой файлов, затем один раз откройте `force-update-v232.html`. `CHECK-232.html` проверяет наличие всех файлов новой версии. Сохранённые проекты не удаляются.
-
-## Изменения
-
-- Три основные схемы: **Змейка**, **Двойная змейка**, **Улитка**.
-- Четвёртый режим — **Комбинированный**: adaptive/multi-cell с локальным выбором рисунка и направления по зонам. В сохранённых проектах внутренний ключ `adaptive` совместим с прежними версиями.
-- Двойная змейка переписана: один непрерывный парный меандр с вложенными разворотами. Подача и обратка проходят навстречу в каждой паре по всей ширине зоны, соединяются один раз на дальнем конце. Двух отдельных горячей/холодной половин больше нет.
-- Для больших прямоугольников, где цельный контур превышает лимит, проверяется разбиение на несколько полных двойных змеек. Каждая имеет отдельную пару выходов **одного** коллектора. Пересечения между контурами и превышение лимита отвергаются.
-- Миниатюры показывают непрерывные красно-синие маршруты, соответствующие рисункам.
-- Auto сравнивает четыре класса; в списке «Вариант» показан один представитель каждого доступного класса. Ориентации, точки старта и направление обхода перебираются внутри расчёта.
-- Явный выбор недоступной схемы больше не подменяется другим рисунком без сообщения.
-- Сохранены алгоритм улитки V2.3.1, локальные улитки Г/Т, обычная змейка, multi-cell и ручной редактор. Обновлён также старый вход `index-v120.html`.
-
-## Проверки
-
-- `node tests/layout-v232.js`: 98 случаев, включая 4×3 и 8×6 м, обе ориентации, отражения, шаг 100/150/200/250 мм и переменный шаг. Проверены границы, отсутствие пересечений/наложений, встречное направление в каждой паре и охват обеими ветвями всей ширины.
-- Браузер: 4×3 м, шаг 150/200 мм, коллектор на каждой из четырёх сторон; соединение с коллектором, геометрия и покрытие проходят проверку.
-- Браузер: 8×6 м, шаг 200 мм, лимит 300 м — один непрерывный меандр около 228,5 м. Это тест большого рисунка при увеличенном лимите, не рекомендация монтажной длины.
-- 8×6 м, шаг 150 мм, лимит 100 м — три двойные змейки около 95,0 / 93,5 / 98,7 м.
-- Auto: четыре класса без дублей ориентации; выбор отдельного класса, сохранение версии, локальное перемещение трубы.
-- Г-форма с коллектором на верхней грани правого крыла: локальные улитки около 67,1 м.
-- Существующие regression: прямоугольник, Г/Т, пристенные препятствия, сложная Г-форма, остров и большая комната; по 12 сочетаний шага/стороны коллектора на каждую из шести малых геометрий.
-- Контрольные quality/regression: T ≈45,3 м; большая Г-форма ≈64,0 + 63,3 м; угловое препятствие ≈50,2 м; multi-cell ≈98,3% покрытия.
-
-Геометрически недоступный рисунок не показывается как готовый. Существующие предупреждения о радиусе изгиба и необходимости проверки краевой зоны после многоконтурного разбиения остаются применимы.
-
----
-
-# Warm V2.3.1
-
-## Что изменено
-
-- Временно убрано ручное добавление второго коллектора.
-- Старые проекты с двумя коллекторами открываются с одним активным основным коллектором.
-- Для сложной схемы с несколькими локальными улитками Warm может показать рекомендацию рассмотреть два коллектора, но не заставляет размещать второй вручную.
-- Коллектор снова отображается как две понятные точки: красная `П` (подача) и синяя `О` (обратка).
-- Убрана отдельная функция «Развернуть поток».
-- В панели коллектора осталась простая команда «Поменять подачу и обратку» и перенос коллектора.
-- Нажатие прямо на одну из двух точек коллектора открывает его настройки.
-- Полностью переработан выбор трубы в режиме «Выбрать и двигать»:
-  - выбор идёт геометрически по ближайшему реальному прямому проходу;
-  - увеличена зона касания;
-  - короткие развороты получают меньший приоритет, чем длинные рабочие проходы;
-  - выбранная труба ярко подсвечивается до движения;
-  - перемещение локальное с шагом 10 мм и больше не привязано к глобальной сетке помещения;
-  - проверяется только изменяемая окрестность, поэтому существующие сложные L/T/multi-cell маршруты не блокируют правку целиком.
-
-## Совместимость
-
-Автоматический планировщик V2.2/V2.3 и режим сложной улитки не изменены.
-
----
-
-# Warm V2.3 — сложная улитка, парная обратка и два коллектора
-
-## Ручное рисование
-- Добавлен переключатель **«Парная обратка»** в ручном режиме.
-- При новом ручном контуре мастер рисует путь подачи внутрь, а Warm пытается сразу построить рядом возврат с текущим шагом и вернуть контур к обратке коллектора.
-- Во время жеста показывается пунктирный предварительный возврат.
-- Включение парной обратки не меняет уже существующие ручные контуры.
-
-## Улитка для Г/Т-образных помещений
-- Принудительный режим **«Улитка»** теперь доступен для стандартных Г- и Т-форм.
-- Сложная область разбивается на естественные прямоугольные части; в каждой строится локальная спираль.
-- Warm сначала пытается собрать минимальное число контуров; если чистое последовательное соединение невозможно, локальные спирали подключаются к тому же коллектору отдельными контурами.
-- Все подводки проходят обычную геометрическую проверку.
-
-## Ручное перемещение в сложной геометрии
-- Исправлена привязка при перетаскивании проходов в Г/Т/multi-cell схемах.
-- Вместо одной глобальной фазы сетки используется локальное положение редактируемого прохода.
-
-## Один или два коллектора
-- Перед первой установкой коллектора Warm спрашивает: **1 или 2 коллектора**.
-- При двух коллекторах мастер последовательно ставит К1 и К2 на стенах.
-- Если исходный расчёт дал только один длинный контур, Warm при возможности пересчитывает план минимум на два контура.
-- Контуры распределяются между К1 и К2 по близости и возможности построить корректные подводки.
-- Если ближайший к К2 контур невозможно безопасно переподключить, проверяются остальные, чтобы второй коллектор не оставался фиктивным.
-- На плане К1 и К2 получают отдельные инженерные бейджи.
-
-## Совместимость
-- Ядро V2.2 multi-cell optimizer не изменялось.
-- Сохранены V2.2.1 выбор укладки, V2.2.2 настройки подачи/обратки и холодных стен, ручной редактор V2.0.
-
----
-
-# Warm V2.2 — multi-cell optimizer
-
-## Что изменилось
-
-- Для сложной свободной геометрии Warm теперь **обязательно сравнивает** глобальную укладку с multi-cell кандидатами, если помещение естественно распадается на 2–8 крупных прямоугольных областей.
-- Multi-cell **не создаёт второй коллектор**: локальные области остаются геометрией укладки, а гидравлические контуры по-прежнему начинаются и заканчиваются на одном выбранном коллекторе.
-- Локальная декомпозиция не навязывается. Глобальный маршрут сохраняется, если он явно лучше.
-- В близком результате multi-cell может выиграть, если даёт заметно лучшее покрытие без существенного роста числа поворотов.
-- При выбранном multi-cell на плане показываются лёгкие пунктирные границы областей A/B/C и направление проходов в каждой.
-- В карточке результата явно указано, что сравнивались global и multi-cell варианты.
-- Исправлена подпись контура: вместо плохо читаемого жёлтого прямоугольника используется компактная белая метка `K1`, `K2` с тёмным текстом.
-- Кэш движка поднят до V2.2.
-
-## Проверки
-
-- T-форма: mixed по-прежнему выбирается, ~45 м, 1 контур.
-- Большая Г-форма: 2 сбалансированных контура ~64 / 63 м.
-- Препятствие справа снизу: глобальная горизонтальная укладка остаётся победителем — multi-cell не навязывается.
-- Препятствие слева снизу: multi-cell из 2 областей выигрывает близкое сравнение за счёт лучшего покрытия при одном контуре и одном коллекторе.
-
----
-
-# Warm V2.1 final — инженерный планировщик
-
-## Главное
-
-- Завершён V2.1-планировщик: `Авто`, `Улитка / спираль`, `Двойная змейка`, `Обычная змейка`, `Адаптивная / mixed`.
-- `Авто` сравнивает допустимые рисунки по длине, покрытию, числу поворотов, радиусу изгиба, положению коллектора и заданному лимиту длины контура.
-- Простая квадратная/прямоугольная комната не делится на зоны без причины. Пока один фактический контур укладывается в лимит, Warm сохраняет один цельный рисунок.
-- Если один контур превышает лимит, включается V1.4 quality optimizer и строится минимально необходимое число сбалансированных контуров.
-
-## Двойная змейка
-
-- Переписан генератор двойной змейки: маршрут теперь строится без самопересечений как две встречные серпантинные половины одного контура с единственным безопасным соединением.
-- Для шага/радиуса, где геометрия физически допустима, вариант проходит тот же валидатор, что и остальные схемы.
-- Если заданный шаг слишком мал для выбранного минимального радиуса, Warm оставляет предупреждение вместо сокрытия проблемы.
-
-## Холодная стена
-
-- Добавлены параметры:
-  - холодная стена;
-  - ширина холодной зоны;
-  - локальный шаг трубы в холодной зоне.
-- Для змейки и двойной змейки проходы автоматически уплотняются в заданной полосе.
-- `Авто` отдаёт приоритет ориентации, которая действительно позволяет проложить дополнительные параллельные проходы вдоль холодной стены.
-- Холодная зона отображается на инженерном чертеже отдельной оранжевой полосой с подписью ширины и локального шага.
-
-## Рендер и монтаж
-
-- Сохранён профессиональный V2.1-рендер: красная подача, синяя обратка, K-1/K-2, координатная сетка, стрелки движения и точки крепления.
-- Сохранён настраиваемый шаг крепления трубы.
-- Сохранены все функции ручного редактора V2.0: ластик, продолжение трубы, A→B, фиксация, Auto / Manual / Overlay.
-
-## Regression
-
-Проверено без изменений ядра V1.4:
-
-- T-форма: mixed, 1 контур ≈ 45.3 м;
-- L-форма 5 × 4.05 м: ≈ 64.0 + 63.3 м, разброс ≈ 1.1%;
-- прямоугольник с большим пристенным препятствием: ≈ 50.2 м, покрытие ≈ 96.4%, горизонтальная ориентация;
-- 5 × 5 м, шаг 150 мм, лимит 100 м: ≈ 81.2 + 81.4 м.
-
-## Ограничения
-
-- Локальный уменьшенный шаг у холодной стены полностью применяется в цельных прямоугольных схемах. Если помещение автоматически делится на несколько контуров старшим V1.4 optimizer, Warm показывает предупреждение: после многоконтурного разбиения локальный холодный шаг нужно визуально проверить.
-- Цельная улитка V2.1 по-прежнему предназначена прежде всего для свободной прямоугольной области. Для сложных L/T/custom-форм и препятствий используется адаптивный V1.4 planner.
-
----
-
-# Warm V2.0-beta
-
-Большое обновление ручного редактора поверх V2.0-alpha.
-
-## Главное
-- В режиме «Правка» появилась постоянная вертикальная touch-панель справа.
-- Инструменты: двигать, рисовать, ластик, фиксация, мост, сравнение, Undo, Redo, Готово.
-- Ластик работает по логическому сегменту с большой touch-зоной, а не стирает пиксели.
-- При вырезании маршрута неизменённая автоматическая часть после разрыва сохраняется серым пунктиром.
-- От появившегося свободного конца можно сразу продолжить трассу карандашом.
-- Если ручной конец подведён к сохранённому хвосту, Warm пытается защёлкнуть соединение автоматически.
-- Кнопка «Мост» ищет короткий допустимый ортогональный путь A→B вокруг разрыва.
-- Сегменты можно фиксировать. Зафиксированный проход и соседний узел нельзя случайно сдвинуть или стереть.
-- Сравнение на правой панели циклически переключает: Manual → Overlay → Auto → Manual.
-- Undo/Redo теперь сохраняют не только геометрию маршрута, но и разрыв/хвост/фиксации.
-
-## Не изменялось
-- Автоматический оптимизатор V1.4.
-- Алгоритм балансировки контуров.
-- Геометрия помещения, препятствий и коллектора.
-
----
-
-# Warm V2.0-alpha — ручная правка трубы
-
-Это patch-обновление поверх Warm V1.4.0. Автоматический оптимизатор V1.4 сохранён без изменений.
-
-## Что добавлено
-
-- Новый инструмент **«Правка»** в нижней панели.
-- Автоматический план копируется в независимый ручной вариант: исходный Auto не уничтожается.
-- Режимы просмотра **Авто / Ручной / Наложить**.
-- Touch-first редактирование прямых проходов: коснуться сегмента и тянуть поперёк.
-- На телефоне рабочая точка смещена от пальца, чтобы палец не закрывал редактируемое место.
-- Перемещаемый проход защёлкивается на сетку шага трубы.
-- Отдельные Undo / Redo для ручной трассы; верхняя кнопка Undo во время ручной правки тоже работает с трубой.
-- Черновой режим **«Рисовать»**: грубый жест сглаживается, превращается в горизонтальные/вертикальные участки и пытается сохранять межосевой шаг между соседними проходами.
-- **«К обратке»** — попытка закончить текущий контур безопасным ортогональным соединением.
-- **«+ Контур»** — начать ещё один ручной контур от коллектора.
-- **«Начать с нуля»** и **«Сбросить к авто»**.
-- Базовая инженерная проверка ручного варианта: выход за помещение/препятствия, самопересечения, завершённость на обратке, длина контура, радиусы, подозрительно малый шаг и отступы.
-- В сводке сравниваются ручная и автоматическая длина, число поворотов и баланс нескольких контуров.
-- Ручной вариант и Auto-baseline сохраняются вместе со схемой.
-
-## Что сознательно оставлено для V2.0-beta
-
-- распознавание целой змейки/зоны одним коротким жестом;
-- локальное «перестроить участок A→B»;
-- фиксация отдельных участков и пересчёт остального;
-- полноценный collision-aware обход препятствий при ручном достраивании;
-- автоматическое исправление всех предупреждений по радиусу изгиба.
-
-## Установка
-
-Скопировать файлы patch-архива в корень репозитория **с заменой существующих файлов**, затем один раз открыть `force-update-v20a.html`.
-
----
-
-# Warm V1.4.0
-
-- Добавлен единый многовариантный optimizer вместо раннего выбора одной эвристики.
-- Сравниваются обе глобальные ориентации.
-- Добавлено разложение фактической свободной площади на локальные прямоугольные зоны в двух направлениях.
-- Локальная ориентация теперь работает не только для T/L sections, но и вокруг пристенных препятствий/ниш.
-- Единый quality score учитывает покрытие, баланс контуров, повороты, короткие проходы, подводки, длину и приближение к лимиту контура.
-- Сохранена балансировка многоконтурной укладки V1.3.
-- Добавлен regression-кейс 4×3 м с крупным препятствием справа снизу.
-- В интерфейсе показано число сравнённых кандидатов и число поворотов.
-
----
-
-# Warm V1.3.0
-
-## Главное
-
-- Добавлена локальная ориентация проходов для составных помещений: разные прямоугольные части T/L/custom могут укладываться по разным осям.
-- Для T-образной комнаты верхняя перекладина и длинная ножка больше не обязаны иметь одно направление змейки.
-- Переработано деление длинной трассы на несколько контуров: контуры формируются около равной целевой длины, а лимит используется как верхнее ограничение.
-- Для 2–3 контуров дополнительно проверяются соседние границы разделения уже по фактической длине с подводками к коллектору.
-- Сохранён резервный circuit-first planner для внутренних островов/колонн.
-- Сохранено исправление V1.2.1 для коллектора внутри/за пристенной технической зоной.
-
-## Контрольные кейсы
-
-- T 4.00 × 3.00 м, перекладина 0.90 м, ножка 1.50 м, шаг 150 мм: mixed orientation, 1 контур ≈45 м.
-- L 5.00 × 4.05 м, сегменты 2.77/2.23 м и 3.09/0.96 м, шаг 150 мм, лимит 90 м: 2 контура ≈64 и ≈63 м.
-
+/* Warm 3.1. Grid guides -> paired inward/outward passes -> exact line/arc geometry.
+   No diameter/radius rule, circuit allocation or collector transit is inferred here. */
+(function(root, factory) {
+  if (typeof module === 'object' && module.exports) module.exports = factory(require('./grid-core.js'), require('./engine-unified.js'));
+  else root.WarmSpiral = factory(root.WarmGrid, root.WarmEngine);
+})(globalThis, function(G, Geometry) {
+  'use strict';
+  const EPS = 1e-6, TAU = 2 * Math.PI;
+  const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+  const same = (a, b) => distance(a, b) < EPS;
+  const key = (x, y) => `${x},${y}`;
+  const edgeKey = (a, b) => a < b ? `${a}:${b}` : `${b}:${a}`;
+  const fail = reason => ({ok: false, status: 'SPIRAL_IMPOSSIBLE', reason, circuits: []});
+
+  function options(input) {
+    const result = {radiusMm: Number(input?.radiusMm), spacingCells: Number(input?.spacingCells ?? 1), wallOffsetMm: Number(input?.wallOffsetMm ?? 100)};
+    if (!Number.isFinite(result.radiusMm) || result.radiusMm <= 0) throw new Error('RADIUS_REQUIRED');
+    if (!Number.isSafeInteger(result.spacingCells) || result.spacingCells < 1) throw new Error('INVALID_SPACING');
+    if (!Number.isFinite(result.wallOffsetMm) || result.wallOffsetMm < 0) throw new Error('INVALID_OFFSET');
+    return result;
+  }
+  function prepare(project, settings) {
+    const p = G.createProject(project), o = options(settings), step = p.grid.cellSizeMm * o.spacingCells;
+    if (o.radiusMm > step / 2 + EPS) throw new Error('RADIUS_DOES_NOT_FIT');
+    // Only reuse the union/erosion geometry helpers. Setting diameter to zero is
+    // deliberate: the new contract has no approved diameter-dependent rules.
+    const space = Geometry.freeSpace({sections: p.room.sections, obstacles: [...p.room.removedAreas, ...p.exclusions.areas], wallOffsetMm: o.wallOffsetMm, pipeDiameterMm: 0});
+    const bounds = p.room.sections.reduce((b, r) => ({minX: Math.min(b.minX, r.x), minY: Math.min(b.minY, r.y), maxX: Math.max(b.maxX, r.x + r.width), maxY: Math.max(b.maxY, r.y + r.height)}), {minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity});
+    const estimate = ((bounds.maxX - bounds.minX) / p.grid.cellSizeMm + 3) * ((bounds.maxY - bounds.minY) / p.grid.cellSizeMm + 3);
+    // Resource guard, not a mounting/circuit-count rule. The UI worker also has a timeout.
+    if (estimate > 120000) throw new Error('AREA_TOO_LARGE');
+    const graph = G.buildGrid(p), nodes = new Map(graph.nodes.map(n => [n.id, n]));
+    const edges = new Map(graph.edges.map(e => [edgeKey(e.from, e.to), e]));
+    const usable = n => n?.status === 'available' && space.contains(n);
+    const guide = (a, b) => a && b && G.classifySegment(p, a, b) === 'available' && space.covers(a, b);
+    const at = (x, y) => nodes.get(key(x * o.spacingCells, y * o.spacingCells));
+    const lattice = new Map();
+    for (const n of graph.nodes) if (n.column % o.spacingCells === 0 && n.row % o.spacingCells === 0 && usable(n)) lattice.set(key(n.column / o.spacingCells, n.row / o.spacingCells), n);
+    return {p, o, step, graph, nodes, edges, space, usable, guide, at, lattice};
+  }
+  const directions = [[1, 0], [0, 1], [-1, 0], [0, -1]];
+  function connectedRects(rects) {
+    if (!rects.length) return false;
+    const seen = new Set([0]), queue = [0];
+    for (let i = 0; i < queue.length; i++) {
+      const a = rects[queue[i]];
+      for (let j = 0; j < rects.length; j++) {
+        if (seen.has(j)) continue;
+        const b = rects[j], x = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
+        const y = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y);
+        // A point contact is not a passage. Include islands too small to hold a grid node.
+        if (x >= -EPS && y >= -EPS && (x > EPS || y > EPS)) {seen.add(j); queue.push(j);}
+      }
+    }
+    return seen.size === rects.length;
+  }
+  function connected(ctx) {
+    if (!connectedRects(ctx.space.raw) || !connectedRects(ctx.space.rects)) return false;
+    const first = ctx.lattice.keys().next().value;
+    if (!first) return false;
+    const seen = new Set([first]), queue = [first];
+    for (let i = 0; i < queue.length; i++) {
+      const id = queue[i], [x, y] = id.split(',').map(Number), a = ctx.lattice.get(id);
+      for (const [dx, dy] of directions) {
+        const next = key(x + dx, y + dy), b = ctx.lattice.get(next);
+        if (b && !seen.has(next) && ctx.guide(a, b)) {seen.add(next); queue.push(next);}
+      }
+    }
+    return seen.size === ctx.lattice.size;
+  }
+  function coversLattice(ctx, points) {
+    const near = new Set();
+    for (const p of points) {
+      const x = (p.x - ctx.p.grid.origin.x) / ctx.step, y = (p.y - ctx.p.grid.origin.y) / ctx.step;
+      if (Math.abs(x - Math.round(x)) > EPS || Math.abs(y - Math.round(y)) > EPS) return false;
+      for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) near.add(key(Math.round(x) + dx, Math.round(y) + dy));
+    }
+    return [...ctx.lattice.keys()].every(id => near.has(id));
+  }
+  function routeGridPoints(ctx, route) {
+    const points = [route[0]];
+    for (let i = 1; i < route.length; i++) {
+      const a = route[i - 1], b = route[i], count = distance(a, b) / ctx.step;
+      if (Math.abs(count - Math.round(count)) > EPS) throw new Error('OFF_GRID');
+      for (let j = 1; j <= Math.round(count); j++) points.push({x: a.x + (b.x - a.x) * j / count, y: a.y + (b.y - a.y) * j / count});
+    }
+    return points;
+  }
+  function squareCovered(ctx, a, b) {
+    const area = (b.x - a.x) * (b.y - a.y);
+    let covered = 0;
+    for (const r of ctx.space.rects) covered += Math.max(0, Math.min(b.x, r.x + r.width) - Math.max(a.x, r.x)) * Math.max(0, Math.min(b.y, r.y + r.height) - Math.max(a.y, r.y));
+    return Math.abs(covered - area) < EPS * Math.max(1, area);
+  }
+  function cellsFor(ctx, phaseX, phaseY) {
+    const cells = new Map();
+    for (const [id, a] of ctx.lattice) {
+      const [x, y] = id.split(',').map(Number);
+      if (((x - phaseX) % 2 + 2) % 2 || ((y - phaseY) % 2 + 2) % 2) continue;
+      const ps = [a, ctx.at(x + 1, y), ctx.at(x + 1, y + 1), ctx.at(x, y + 1)];
+      if (!ps.every(n => ctx.usable(n)) || !ps.every((n, i) => ctx.guide(n, ps[(i + 1) % 4])) || !squareCovered(ctx, ps[0], ps[2])) continue;
+      cells.set(id, {id, x, y, ps});
+    }
+    return cells;
+  }
+  function joins(ctx, a, b) {
+    if (b.x > a.x) return [[a.ps[1], a.ps[2]], [b.ps[0], b.ps[3]], [a.ps[1], b.ps[0]], [a.ps[2], b.ps[3]]];
+    if (b.x < a.x) return joins(ctx, b, a);
+    if (b.y > a.y) return [[a.ps[3], a.ps[2]], [b.ps[0], b.ps[1]], [a.ps[3], b.ps[0]], [a.ps[2], b.ps[1]]];
+    return joins(ctx, b, a);
+  }
+  function makeCycle(ctx, cells, clockwise) {
+    if (!cells.size) return null;
+    const adjacency = new Map(), visited = new Set();
+    const add = (a, b) => {adjacency.get(a.id).add(b.id); adjacency.get(b.id).add(a.id);};
+    const remove = (a, b) => {adjacency.get(a.id).delete(b.id); adjacency.get(b.id).delete(a.id);};
+    for (const c of cells.values()) {
+      for (const p of c.ps) adjacency.set(p.id, new Set());
+      for (let i = 0; i < 4; i++) add(c.ps[i], c.ps[(i + 1) % 4]);
+    }
+    const seed = [...cells.values()].sort((a, b) => a.y - b.y || a.x - b.x)[0];
+    const stack = [{cell: seed, direction: 0}]; visited.add(seed.id);
+    // Following straight runs then clockwise boundary turns peels a rectangle
+    // inward. At branches, the stack retains the return pass instead of dropping
+    // unvisited arms. Splicing the cycles along this tree keeps one simple circuit.
+    while (stack.length) {
+      const current = stack.at(-1), turn = clockwise ? 1 : -1;
+      const order = [current.direction, (current.direction + turn + 4) % 4, (current.direction - turn + 4) % 4, (current.direction + 2) % 4];
+      let found = false;
+      for (const d of order) {
+        const [dx, dy] = directions[d], next = cells.get(key(current.cell.x + dx * 2, current.cell.y + dy * 2));
+        if (!next || visited.has(next.id)) continue;
+        const [e1, e2, bridge1, bridge2] = joins(ctx, current.cell, next);
+        if (!ctx.guide(...bridge1) || !ctx.guide(...bridge2)) continue;
+        remove(...e1); remove(...e2); add(...bridge1); add(...bridge2);
+        visited.add(next.id); stack.push({cell: next, direction: d}); found = true; break;
+      }
+      if (!found) stack.pop();
+    }
+    if (visited.size !== cells.size) return null;
+    const first = seed.ps[0].id, cycle = []; let previous = null, current = first;
+    do {
+      cycle.push(ctx.nodes.get(current));
+      const links = adjacency.get(current); if (links?.size !== 2) return null;
+      const next = [...links].find(id => id !== previous); previous = current; current = next;
+    } while (current !== first && cycle.length <= adjacency.size);
+    if (cycle.length !== adjacency.size) return null;
+    // A phase must not omit long arms or isolated pockets. Every usable lattice
+    // node needs a pass in its own or an immediately adjacent grid cell. This is
+    // a geometric completeness check, not an estimate of thermal coverage.
+    if (!coversLattice(ctx, cycle)) return null;
+    return cycle;
+  }
+  function openCycle(ctx, cycle) {
+    const target = ctx.p.collector.supply || cycle[0];
+    let best = 0, score = Infinity;
+    for (let i = 0; i < cycle.length; i++) {
+      const a = cycle[i], b = cycle[(i + 1) % cycle.length];
+      const d = distance(target, {x: (a.x + b.x) / 2, y: (a.y + b.y) / 2});
+      if (d < score) {score = d; best = i;}
+    }
+    let route = [...cycle.slice(best + 1), ...cycle.slice(0, best + 1)].map(({x, y}) => ({x, y}));
+    if (distance(route.at(-1), target) < distance(route[0], target)) route.reverse();
+    return Geometry.clean(route);
+  }
+  function guideRecord(ctx, a, b) {
+    const g = ctx.p.grid, ca = (a.x - g.origin.x) / g.cellSizeMm, ra = (a.y - g.origin.y) / g.cellSizeMm;
+    const cb = (b.x - g.origin.x) / g.cellSizeMm, rb = (b.y - g.origin.y) / g.cellSizeMm;
+    if (![ca, ra, cb, rb].every(v => Math.abs(v - Math.round(v)) < EPS) || !ctx.guide(a, b)) throw new Error('OFF_GRID');
+    const x = Math.round(ca), y = Math.round(ra), tx = Math.round(cb), ty = Math.round(rb);
+    if ((x !== tx && y !== ty) || (x === tx && y === ty)) throw new Error('OFF_GRID');
+    const dx = Math.sign(tx - x), dy = Math.sign(ty - y), count = Math.abs(tx - x) + Math.abs(ty - y), edgeIds = [];
+    for (let i = 0; i < count; i++) {
+      const edge = ctx.edges.get(edgeKey(key(x + dx * i, y + dy * i), key(x + dx * (i + 1), y + dy * (i + 1))));
+      if (edge?.status !== 'available') throw new Error('OFF_GRID');
+      edgeIds.push(edge.id);
+    }
+    return {fromNodeId: key(x, y), toNodeId: key(tx, ty), edgeIds};
+  }
+  function compile(ctx, route) {
+    if (!Array.isArray(route) || route.length < 4 || route.some(p => !p || !Number.isFinite(p.x) || !Number.isFinite(p.y))) throw new Error('INVALID_ROUTE');
+    const guides = route.slice(1).map((b, i) => guideRecord(ctx, route[i], b));
+    const R = ctx.o.radiusMm, segments = []; let cursor = route[0];
+    const line = (b, guide) => {if (distance(cursor, b) > EPS) segments.push({type: 'straight', from: {...cursor}, to: {...b}, guide, lengthMm: distance(cursor, b)}); cursor = b;};
+    for (let i = 1; i < route.length - 1; i++) {
+      const a = route[i - 1], b = route[i], c = route[i + 1], ab = distance(a, b), bc = distance(b, c);
+      const u = {x: (b.x - a.x) / ab, y: (b.y - a.y) / ab}, v = {x: (c.x - b.x) / bc, y: (c.y - b.y) / bc};
+      if (Math.abs(u.x * v.x + u.y * v.y) > EPS) throw new Error('INVALID_TURN');
+      const from = {x: b.x - u.x * R, y: b.y - u.y * R}, to = {x: b.x + v.x * R, y: b.y + v.y * R};
+      if ((from.x - cursor.x) * u.x + (from.y - cursor.y) * u.y < -EPS || bc < R - EPS) throw new Error('RADIUS_DOES_NOT_FIT');
+      line(from, guides[i - 1]);
+      const center = {x: from.x + v.x * R, y: from.y + v.y * R}, delta = (u.x * v.y - u.y * v.x) * Math.PI / 2;
+      segments.push({type: 'curve', from, to, center, radiusMm: R, startAngle: Math.atan2(from.y - center.y, from.x - center.x), sweepAngle: delta, lengthMm: Math.abs(delta) * R});
+      cursor = to;
+    }
+    line(route.at(-1), guides.at(-1));
+    return segments;
+  }
+  function arcParameter(arc, angle) {
+    let d = (angle - arc.startAngle) % TAU;
+    if (arc.sweepAngle > 0 && d < -EPS) d += TAU;
+    if (arc.sweepAngle < 0 && d > EPS) d -= TAU;
+    return d / arc.sweepAngle;
+  }
+  const arcAt = (arc, t) => ({x: arc.center.x + arc.radiusMm * Math.cos(arc.startAngle + t * arc.sweepAngle), y: arc.center.y + arc.radiusMm * Math.sin(arc.startAngle + t * arc.sweepAngle)});
+  const onArc = (arc, p) => {const t = arcParameter(arc, Math.atan2(p.y - arc.center.y, p.x - arc.center.x)); return t >= -EPS && t <= 1 + EPS;};
+  function arcInside(ctx, arc) {
+    const ts = [0, 1], all = [...ctx.space.rects, ...ctx.p.exclusions.areas, ...ctx.p.room.removedAreas];
+    const add = angle => {const t = arcParameter(arc, angle); if (t > 0 && t < 1) ts.push(t);};
+    for (const r of all) {
+      for (const x of [r.x, r.x + r.width]) {const v = (x - arc.center.x) / arc.radiusMm; if (Math.abs(v) <= 1) {const a = Math.acos(v); add(a); add(-a);}}
+      for (const y of [r.y, r.y + r.height]) {const v = (y - arc.center.y) / arc.radiusMm; if (Math.abs(v) <= 1) {const a = Math.asin(v); add(a); add(Math.PI - a);}}
+    }
+    ts.sort((a, b) => a - b);
+    const inside = t => {const p = arcAt(arc, t); return ctx.space.contains(p) && G.classifyPoint(ctx.p, p) === 'available';};
+    // Include boundary-event points: a tangential touch of an exclusion is forbidden.
+    return ts.every(inside) && ts.slice(1).every((t, i) => inside((t + ts[i]) / 2));
+  }
+  function lineArc(line, arc) {
+    const a = line.from, b = line.to, dx = b.x - a.x, dy = b.y - a.y, x = a.x - arc.center.x, y = a.y - arc.center.y;
+    const A = dx * dx + dy * dy, B = 2 * (x * dx + y * dy), C = x * x + y * y - arc.radiusMm ** 2, disc = B * B - 4 * A * C;
+    if (disc < -EPS) return false;
+    return [(-B - Math.sqrt(Math.max(0, disc))) / (2 * A), (-B + Math.sqrt(Math.max(0, disc))) / (2 * A)]
+      .some(t => t >= -EPS && t <= 1 + EPS && onArc(arc, {x: a.x + t * dx, y: a.y + t * dy}));
+  }
+  function arcArc(a, b) {
+    const d = distance(a.center, b.center), r = a.radiusMm, s = b.radiusMm;
+    if (d < EPS) return Math.abs(r - s) < EPS && [a.from, a.to, arcAt(a, .5)].some(p => onArc(b, p)) || d < EPS && Math.abs(r - s) < EPS && [b.from, b.to, arcAt(b, .5)].some(p => onArc(a, p));
+    if (d > r + s + EPS || d < Math.abs(r - s) - EPS) return false;
+    const x = (d * d + r * r - s * s) / (2 * d), h = Math.sqrt(Math.max(0, r * r - x * x));
+    const ux = (b.center.x - a.center.x) / d, uy = (b.center.y - a.center.y) / d;
+    return [-1, 1].some(sign => {const p = {x: a.center.x + ux * x - sign * uy * h, y: a.center.y + uy * x + sign * ux * h}; return onArc(a, p) && onArc(b, p);});
+  }
+  function intersections(segments, binSize) {
+    const bins = new Map(), tested = new Set();
+    for (let i = 0; i < segments.length; i++) {
+      const a = segments[i], ps = [a.from, a.to];
+      if (a.type === 'curve') for (let j = 0; j < 4; j++) {const angle = j * Math.PI / 2, t = arcParameter(a, angle); if (t > 0 && t < 1) ps.push(arcAt(a, t));}
+      const x0 = Math.floor((Math.min(...ps.map(p => p.x)) - EPS) / binSize), x1 = Math.floor((Math.max(...ps.map(p => p.x)) + EPS) / binSize);
+      const y0 = Math.floor((Math.min(...ps.map(p => p.y)) - EPS) / binSize), y1 = Math.floor((Math.max(...ps.map(p => p.y)) + EPS) / binSize);
+      for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) {
+        const id = key(x, y), others = bins.get(id) || [];
+        for (const j of others) {
+          if (i - j <= 1 || tested.has(`${j}:${i}`)) continue;
+          tested.add(`${j}:${i}`); const b = segments[j];
+          const hit = a.type === 'straight' ? (b.type === 'straight' ? Geometry.intersect(a.from, a.to, b.from, b.to) : lineArc(a, b)) : (b.type === 'straight' ? lineArc(b, a) : arcArc(a, b));
+          if (hit) return true;
+        }
+        others.push(i); bins.set(id, others);
+      }
+    }
+    return false;
+  }
+  function checkSegments(ctx, segments) {
+    if (!segments.length || segments.slice(1).some((s, i) => !same(segments[i].to, s.from))) throw new Error('DISCONTINUOUS');
+    for (const s of segments) {
+      if (s.type === 'straight' ? !ctx.guide(s.from, s.to) : !arcInside(ctx, s)) throw new Error('OUTSIDE_ALLOWED_AREA');
+    }
+    if (intersections(segments, ctx.step)) throw new Error('SELF_INTERSECTION');
+  }
+  function plan(project, settings) {
+    let ctx;
+    try {ctx = prepare(project, settings);} catch (e) {return fail(e.message);}
+    if (!connected(ctx)) return fail('DISCONNECTED_OR_EMPTY_GRID');
+    const candidates = [];
+    for (const px of [0, 1]) for (const py of [0, 1]) {
+      const cells = cellsFor(ctx, px, py);
+      for (const clockwise of [true, false]) {
+        const cycle = makeCycle(ctx, cells, clockwise); if (!cycle) continue;
+        try {
+          const route = openCycle(ctx, cycle), segments = compile(ctx, route); checkSegments(ctx, segments);
+          const lengthMm = segments.reduce((s, p) => s + p.lengthMm, 0);
+          candidates.push({id: 'grid-spiral-1', number: 1, method: 'spiral', scope: 'heating', status: 'SPIRAL_OK',
+            diameterMm: ctx.p.pipe.diameterMm, route, segments, entry: {...segments[0].from}, exit: {...segments.at(-1).to},
+            lengthMm, supplyTransit: null, returnTransit: null, visitedGridNodes: cycle.length, clockwise});
+        } catch { /* A candidate is never displayed unless every geometric check passes. */ }
+      }
+    }
+    candidates.sort((a, b) => b.visitedGridNodes - a.visitedGridNodes || a.lengthMm - b.lengthMm);
+    if (!candidates.length) return fail('NO_VALID_SPIRAL');
+    const circuit = candidates[0];
+    return {ok: true, status: 'SPIRAL_OK', planner: 'grid-spiral-v31', scope: 'heating', settings: ctx.o, circuits: [circuit],
+      lengthMm: circuit.lengthMm, needsTransit: true, overLength: circuit.lengthMm > 80000,
+      warnings: circuit.lengthMm > 80000 ? ['HEATING_LENGTH_OVER_80M'] : []};
+  }
+  function validate(project, settings, result) {
+    try {
+      const ctx = prepare(project, settings);
+      if (!result?.ok || result.status !== 'SPIRAL_OK' || result.circuits?.length !== 1) throw new Error('INVALID_PLAN');
+      const c = result.circuits[0], expected = compile(ctx, c.route); checkSegments(ctx, expected);
+      if (!connected(ctx)) throw new Error('DISCONNECTED_OR_EMPTY_GRID');
+      if (!coversLattice(ctx, routeGridPoints(ctx, c.route))) throw new Error('INCOMPLETE_COVERAGE');
+      if (JSON.stringify(expected) !== JSON.stringify(c.segments)) throw new Error('GEOMETRY_CHANGED');
+      const lengthMm = expected.reduce((sum, p) => sum + p.lengthMm, 0);
+      if (![c.lengthMm, result.lengthMm].every(Number.isFinite) || Math.abs(lengthMm - c.lengthMm) > EPS || Math.abs(lengthMm - result.lengthMm) > EPS) throw new Error('INVALID_LENGTH');
+      if (!same(c.entry, expected[0].from) || !same(c.exit, expected.at(-1).to)) throw new Error('INVALID_ENDPOINTS');
+      if (result.planner !== 'grid-spiral-v31' || result.scope !== 'heating' || result.needsTransit !== true ||
+          c.scope !== 'heating' || c.method !== 'spiral' || c.status !== 'SPIRAL_OK' || c.diameterMm !== ctx.p.pipe.diameterMm ||
+          c.supplyTransit !== null || c.returnTransit !== null || JSON.stringify(result.settings) !== JSON.stringify(ctx.o) ||
+          result.overLength !== (lengthMm > 80000) || JSON.stringify(result.warnings) !== JSON.stringify(lengthMm > 80000 ? ['HEATING_LENGTH_OVER_80M'] : [])) throw new Error('INVALID_METADATA');
+      return {ok: true, lengthMm};
+    } catch (e) {return {ok: false, reason: e.message};}
+  }
+  function svgPath(segments) {
+    if (!segments.length) return '';
+    return `M ${segments[0].from.x} ${segments[0].from.y}` + segments.map(s => s.type === 'straight' ? ` L ${s.to.x} ${s.to.y}` : ` A ${s.radiusMm} ${s.radiusMm} 0 0 ${s.sweepAngle > 0 ? 1 : 0} ${s.to.x} ${s.to.y}`).join('');
+  }
+  function pathRange(segments, from, to) {
+    const parts = []; let offset = 0;
+    for (const s of segments) {
+      const lo = Math.max(0, from - offset), hi = Math.min(s.lengthMm, to - offset);
+      if (hi > lo + EPS) {
+        const at = t => s.type === 'curve' ? arcAt(s, t) : ({x: s.from.x + (s.to.x - s.from.x) * t, y: s.from.y + (s.to.y - s.from.y) * t});
+        const part = {...s, from: at(lo / s.lengthMm), to: at(hi / s.lengthMm)};
+        parts.push(part);
+      }
+      offset += s.lengthMm;
+    }
+    return svgPath(parts);
+  }
+  return {plan, validate, svgPath, pathRange, arcAt};
+});
