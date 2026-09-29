@@ -1,82 +1,111 @@
-const test=require('node:test');
-const assert=require('node:assert/strict');
-const E=require('../engine-unified.js');
-const fixtures=require('./fixtures.cjs');
-const results=[];
-const cache=new Map();
-const inside=(p,r)=>p.x>=r.x-1e-6&&p.y>=r.y-1e-6&&p.x<=r.x+r.width+1e-6&&p.y<=r.y+r.height+1e-6;
-function pointSegment(p,a,b){const x=b.x-a.x,y=b.y-a.y,t=Math.max(0,Math.min(1,((p.x-a.x)*x+(p.y-a.y)*y)/(x*x+y*y||1)));return Math.hypot(p.x-a.x-t*x,p.y-a.y-t*y);}
-function verify(input,p){
- assert.equal(p.ok,true,JSON.stringify(p.diagnostics));
- assert.equal(p.hard.ok,true);
- assert.equal(E.validate(input,p).ok,true);
- assert.ok(p.circuits.length);
- const all=[];
- for(const c of p.circuits){
-  assert.deepEqual(c.route[0],c.supply);assert.deepEqual(c.route.at(-1),c.returnPoint);
-  let length=0;
-  for(let i=1;i<c.route.length;i++){
-   const a=c.route[i-1],b=c.route[i],d=Math.hypot(a.x-b.x,a.y-b.y);length+=d;
-   assert.ok(d>0&&Number.isFinite(d));
-   for(let j=0;j<=Math.ceil(d/15);j++){const t=j/Math.ceil(d/15),v={x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t};assert.ok(input.sections.some(r=>inside(v,r)),'segment leaves room');assert.ok(!input.obstacles.some(r=>v.x>r.x-7.99&&v.x<r.x+r.width+7.99&&v.y>r.y-7.99&&v.y<r.y+r.height+7.99),'pipe hits obstacle');}
-   all.push([a,b]);
-  }
-  assert.ok(length<=input.maxCircuitLengthMm+1e-5,'length includes both connectors');
-  assert.ok(Math.abs(c.length-length)<1e-5,'do not trust stale length metadata');
-  const curve=E.rounded(c.route,c.bendRadiusMm);assert.ok(curve);assert.ok(curve.length<=length+1e-5);
-  for(const part of curve.primitives)for(const q of part.points){assert.ok(input.sections.some(r=>inside(q,r)),'rounded pipe leaves room');assert.ok(!input.obstacles.some(r=>q.x>r.x&&q.x<r.x+r.width&&q.y>r.y&&q.y<r.y+r.height),'rounded pipe hits obstacle');}
- }
- // Independent, fixed-grid coverage oracle over the original input union. The
- // planner's reported percentage is not the acceptance oracle.
- const l=Math.min(...input.sections.map(r=>r.x)),r=Math.max(...input.sections.map(r=>r.x+r.width)),t=Math.min(...input.sections.map(r=>r.y)),b=Math.max(...input.sections.map(r=>r.y+r.height)),off=input.wallOffsetMm;
- let total=0,covered=0,sum=0;
- for(let y=t+37.5;y<b;y+=75)for(let x=l+37.5;x<r;x+=75){
-  if(![-off,0,off].every(dx=>[-off,0,off].every(dy=>input.sections.some(r=>inside({x:x+dx,y:y+dy},r)))))continue;
-  if(input.obstacles.some(r=>x>=r.x-off&&x<=r.x+r.width+off&&y>=r.y-off&&y<=r.y+r.height+off))continue;
-  const d=Math.min(...all.map(([a,b])=>pointSegment({x,y},a,b)));total++;sum+=d;if(d<=input.pipeStepMm*.8)covered++;
- }
- const coverage=covered/total;assert.ok(coverage>=.8,`coverage ${(coverage*100).toFixed(1)}%`);assert.ok(sum/total<input.pipeStepMm*.65,'mean distance to pipe');
- assert.ok(p.quality.medianSpacing>=input.pipeStepMm*.75&&p.quality.medianSpacing<=input.pipeStepMm*1.65,'typical spacing');
- return coverage;
-}
-const patterns=['auto','snake','double-snake','spiral','adaptive'];
-for(const f of fixtures)for(const pattern of patterns)test(`${f.name} / ${pattern}`,()=>{
- const input={...f.input,pattern},p=E.plan(input);const coverage=verify(input,p);cache.set(`${f.name}/${pattern}`,p);
- if(pattern!=='auto')assert.equal(p.kind,pattern,'explicit request must not silently change family');
- results.push({name:f.name,pattern,circuits:p.circuits.length,lengths:p.circuits.map(c=>+(c.length/1000).toFixed(2)),coverage:+coverage.toFixed(4),milliseconds:p.elapsedMs});
-});
-function rotate(input){const p=q=>({...q,x:-q.y,y:q.x,side:{top:'right',right:'bottom',bottom:'left',left:'top'}[q.side]});const rect=r=>({x:-r.y-r.height,y:r.x,width:r.height,height:r.width});return {...input,sections:input.sections.map(rect),obstacles:input.obstacles.map(rect),supply:p(input.supply),returnPoint:p(input.returnPoint)};}
-// Rotation and translation exercise geometry, rather than names of presets.
-for(const index of [0,1,2,3,6,8,9])test(`${fixtures[index].name} / rotated spiral`,()=>{const f=fixtures[index];verify({...rotate(f.input),pattern:'spiral'},E.plan({...rotate(f.input),pattern:'spiral'}));});
-for(const step of [100,200])test(`rectangle / pitch ${step}`,()=>{const input={...fixtures[0].input,pattern:'auto',pipeStepMm:step};verify(input,E.plan(input));});
-test('shorter length limit partitions before routing',()=>{const input={...fixtures[0].input,pattern:'spiral',maxCircuitLengthMm:50000};const p=E.plan(input);verify(input,p);assert.ok(p.circuits.length>=2);});
-test('hard validation catches corrupted geometry and metadata',()=>{
- const input=fixtures[0].input,p=cache.get('rectangle/spiral')||E.plan({...input,pattern:'spiral'}),copy=()=>structuredClone(p);
- let q=copy();q.circuits[0].route[3].x=-100;assert.equal(E.validate(input,q).checks.H1_freeSpace,false);
- q=copy();q.circuits[0].length=0;assert.equal(E.validate({...input,maxCircuitLengthMm:1000},q).checks.H6_circuitLimit,false);
- q=copy();q.circuits.push(structuredClone(q.circuits[0]));assert.equal(E.validate(input,q).checks.H3_crossings,false);
- q=copy();q.circuits[0].supply.x+=10;assert.equal(E.validate(input,q).checks.H5_continuity,false);
- assert.equal(E.validate({...input,minBendRadiusMm:500},p).checks.H4_bendRadius,false);
- q=copy();q.circuits[0].bendRadiusMm=1;assert.equal(E.validate(input,q).checks.H4_bendRadius,false,'rendered and validated radius must agree');
- const diagonal={circuits:[{route:[input.supply,{x:1000,y:2600},input.returnPoint],supply:input.supply,returnPoint:input.returnPoint}]};
- assert.equal(E.validate({...input,obstacles:[{x:795,y:2795,width:10,height:10}]},diagonal).checks.H2_obstacles,false,'obstacles on diagonal cabinet connectors');
- const joint={a:{x:0,y:1500},b:{x:4000,y:1500}};
- assert.equal(E.validate({...input,deformationJoints:[joint]},p).checks.H7_movementJoints,false);
- assert.equal(E.validate({...input,deformationJoints:[{...joint,allowCrossing:true,sleeve:true}]},p).checks.H7_movementJoints,true);
- const arc=E.rounded(p.circuits[0].route,80).primitives.find(p=>p.type==='arc'),angle=arc.start+arc.delta/2;
- const at=r=>({x:arc.center.x+r*Math.cos(angle),y:arc.center.y+r*Math.sin(angle)});
- assert.equal(E.validate({...input,deformationJoints:[{a:at(78),b:at(82)}]},p).checks.H7_movementJoints,false,'detect crossings on the arc, not only on the corner polyline');
-});
-test('quality never acts as a hard constraint',()=>{
- const input={...fixtures[0].input,qualityWeights:Array(8).fill(0)},p=E.plan(input);assert.equal(p.ok,true);assert.equal(p.quality.score,0);assert.equal(p.hard.ok,true);
- assert.deepEqual(Object.keys(p.hard.checks).map(k=>k.slice(0,2)),['H1','H2','H3','H4','H5','H6','H7']);
-});
-test('impossible, invalid and disconnected inputs return no route',()=>{
- const input=fixtures[0].input;
- for(const x of [{...input,maxCircuitLengthMm:500},{...input,obstacles:[{x:0,y:0,width:4000,height:3000}]},{...input,sections:[{x:0,y:0,width:4000,height:3000},{x:6000,y:0,width:1000,height:1000}]},{...input,pipeStepMm:NaN},{...input,supply:{x:600,y:1500,side:'bottom'},returnPoint:{x:650,y:1500,side:'bottom'}}]){const p=E.plan(x);assert.equal(p.ok,false);assert.equal(p.circuits.length,0);}
-});
-test('offsets apply to the union, not artificial section seams',()=>{
- const input=fixtures[0].input,split={...input,sections:[{x:0,y:0,width:1500,height:3000},{x:1500,y:0,width:2500,height:3000}]};
- assert.deepEqual(E.freeSpace(E.normalize(input)).rects,E.freeSpace(E.normalize(split)).rects);
-});
-test.after(()=>{if(process.env.WARM_REPORT)require('node:fs').writeFileSync(process.env.WARM_REPORT,JSON.stringify(results,null,2));});
+# Warm 3.1 — рабочая улитка по монтажной сетке
+
+Дата: 29 сентября 2026. База патча: Warm 3.0.0, коммит `28e3182`.
+
+## Результат этапа
+
+Один связный маршрут рабочей части улитки. Прямые привязаны к направляющим Grid,
+повороты — отдельные круговые дуги с касательным сопряжением. Редактор формы,
+точные препятствия, монтажная сетка 100/150/200 мм и трубы 16/17/20 мм сохранены.
+
+Новый результат явно имеет `scope: heating`, `needsTransit: true` и не объявляется
+полным контуром (`routeComplete: false`). Подводы к коллектору не построены и в длину
+не входят. Коллектор помогает выбрать ближайший открытый край улитки, его положение
+не меняется. Двойная змейка и подводы относятся к 3.2. Несколько сеточных контуров —
+к 3.3, монтажная правка их сегментов — к 3.4.
+
+## Входные параметры
+
+- `radiusMm`: обязательное число больше нуля, вводит пользователь. Значения по
+  умолчанию и зависимости от диаметра нет.
+- `spacingCells`: положительное целое число ячеек, изначально 1. Фактический шаг
+  проходов равен этому числу, умноженному на размер ячейки.
+- `wallOffsetMm`: явный отступ от границы доступной зоны, включая исключения;
+  изначально 100 мм. Он может быть изменён пользователем.
+
+Диаметр сохраняется в модели и определяет толщину трубы при отображении. Расчёт
+не выводит из него радиус, отступ или шаг. Показанная длина свыше 80 м сопровождается
+предупреждением без выбора числа контуров или автоматического разбиения.
+
+## Устройство и проверка
+
+`spiral-core.js` — отдельное чистое ядро. Из прежнего `engine-unified.js` используются
+только геометрические функции объединения прямоугольников, отступа, удаления лишних
+вершин и пересечения прямых. Старый планировщик и его нормативные предположения не
+участвуют в новом расчёте; в функцию отступа передаётся диаметр 0 и явный отступ.
+
+1. Проверяется связность свободной площади до/после отступа и сетки выбранного шага.
+   Изолированный островок не игнорируется, даже если в него не попал ни один узел.
+2. Проверяются четыре смещения парных ячеек и два направления обхода. Замкнутые
+   обходы ячеек соединяются вдоль дерева проходов. На прямоугольнике порядок ведёт
+   внутрь и обратно; на разветвлениях сохраняются возвратные проходы.
+3. Цикл размыкается около коллектора. Направляющие преобразуются в прямые и дуги.
+   Радиус не уменьшается при нехватке места: такой вариант отклоняется.
+4. Проверяются все прямые и дуги, включая точки касания границ исключений.
+   Дуги разбиваются аналитически в событиях пересечения координат границ, а
+   самопересечения проверяются для пар прямых/дуг/окружностей.
+5. Каждый доступный узел выбранного шага должен находиться на проходе или в соседней
+   ячейке (в том числе по диагонали). Это проверка геометрического охвата, не расчёт
+   отопления. Длина — сумма прямых и `radius × |angle|` для дуг.
+
+Результат: `SPIRAL_OK` либо `SPIRAL_IMPOSSIBLE` с причиной и пустым списком контуров.
+Отказ означает отсутствие проверенного варианта в этом алгоритме; он не является
+доказательством физической невозможности уложить трубу.
+
+## Ограничения алгоритма
+
+- Парный обход требует радиуса не более половины выбранного шага. Это ограничение
+  используемого построения, а не правило для диаметра трубы. Проверить иной вариант
+  можно, явно изменив шаг; программа сама этого не делает.
+- Сложные узкие коридоры вокруг препятствий могут не вместить парный обход. В таких
+  случаях выдаётся отказ. Есть проверенные примеры проходов шириной 900 мм и отказа
+  для соединительной горловины 100 мм; универсальный минимальный проход не задан.
+- Отступ строится консервативно прямоугольными полосами вокруг границ. Поиск не
+  перебирает все возможные монтажные решения и не подбирает смещение начала сетки.
+- Геометрические проверки относятся к осевой линии. Допустимые зазоры между трубами
+  и нормативные радиусы ещё требуют согласования; такие нормы не выдумываются.
+- Защита ресурсов: оценка до 120 000 узлов и до 30 секунд работы worker.
+  Это техническая защита интерфейса, не ограничение числа контуров.
+
+## Интерфейс и данные
+
+`app-v310.js` подключён после прежних адаптеров и ручного редактора. Кнопка «Улитка»
+открывает параметры нового расчёта; «Прежний расчёт» явно открывает старые методы.
+Фоновый расчёт отменяется при новой схеме/изменении параметров; устаревший результат
+не применяется. Изменение формы, исключений, сетки, трубы или коллектора сбрасывает
+показанную улитку. Прежний ручной редактор не изменяет новый маршрут.
+
+Сохранение содержит `spiralSettingsV31`, `gridSpiralPlanV31` и новые записи в
+`projectV3.circuits`. При загрузке заново проверяются направляющие, кривые, охват,
+непрерывность, длина и метаданные, включая предупреждение 80 м и отсутствие подводов.
+Некорректный результат отбрасывается с предложением пересчитать схему.
+
+PNG включает рабочую трубу, сетку и размеры, длину и явную пометку об отсутствии
+подключения к коллектору. Старые схемы 3.0/2.x и ручные черновики продолжают
+открываться через прежнюю миграцию. Пользовательские данные остаются в localStorage.
+
+## Проверки
+
+Среда: Windows, Node.js 24, Playwright / Microsoft Edge, размеры экрана 1280×900 и
+390×844. Команды запуска можно выполнять на Node.js 22+.
+
+- `node --test tests/grid-core.test.cjs tests/spiral-core.test.cjs`: 20/20.
+  Прямоугольник, Г-форма, выступы, асимметрия, узкая комната, исключения, все девять
+  сочетаний сетки/диаметра, явный радиус, увеличенный шаг, длина свыше 80 м,
+  изолированные островки, разрывы, самопересечение, недостаточный охват и порча дуги.
+- `node tests/spiral-browser.cjs`: оба размера экрана. Реальный worker, обязательный
+  радиус, PNG, сохранение/перезагрузка, отклонение испорченной дуги, редактор формы,
+  отмена фонового расчёта, шаг в две ячейки и явный переход к старому расчёту.
+- `node tests/grid-browser.cjs`: оба размера экрана. Сетка, диаметр, точные размеры,
+  вырезы/поворот/отмена, миграция, прежняя ручная правка и восстановление черновика.
+- `WARM_SMOKE=1 node tests/browser.cjs`: прежний расчёт, сохранение, подача/обратка,
+  нарисованная геометрия, защита от устаревших результатов.
+- `node tests/columns.cjs`: реальное рисование колонны, 75 положений относительно
+  сетки, пять прежних методов раскладки, сохранение и повторная проверка.
+- `node tests/notifications.cjs`: четыре размера экрана, сообщения, жесты,
+  уведомление о расчёте, отмена, ручная правка и реальный worker.
+
+Предыдущий полный прогон старого решателя: 95/96. Его сбой на несвязанных комнатах и
+прежний сбой `mobile-editor.cjs` на размере шрифта описаны в `WARM-3-PLAN.md`.
+Старый решатель и CSS ручного редактора в 3.1 не менялись; полный старый набор не
+считается прошедшим. Новые проверки сеточной улитки включены в job `grid-core`.

@@ -1,123 +1,123 @@
-/* Warm 2.9.1: UI adapter for the single, independently testable planner. */
-(()=>{
-'use strict';
-const Engine=globalThis.WarmEngine;
-const titles={auto:'Авто',snake:'Змейка','double-snake':'Двойная змейка',spiral:'Улитка',adaptive:'Комбинированная'};
-const baseRender=renderPlan,baseCircuit=engineeringCircuitSvgV21;
-let generation=0,cancelWorker=null;
-function input(){
- const shapeCell=k=>{const [x,y]=k.split(',').map(Number),g=Number(state.shapeStepMm)||100;return{x:x*g,y:y*g,width:g,height:g};};
- const gridCell=k=>{const [x,y]=k.split(',').map(Number),g=Number(state.gridStepMm)||50;return{x:x*g,y:y*g,width:g,height:g};};
- const obstacles=state.obstacles||[];
- // The editor rasterizes each exact obstacle into `excluded` for display and
- // legacy hit testing (syncExcludedFromObstaclesV6). Those cells are a derived
- // mask, not additional physical obstacles. Unioning both creates narrow false
- // ledges whenever a centimetre-snapped rectangle is off the drawing grid.
- // Keep independent painted exclusions: only cells owned by an exact obstacle
- // under the same centre-in-rectangle rule are omitted from the engine input.
- const excluded=[...(state.excluded||[])].map(gridCell).filter(r=>{
-  const x=r.x+r.width/2,y=r.y+r.height/2;
-  return !obstacles.some(o=>x>=o.x&&x<=o.x+o.width&&y>=o.y&&y<=o.y+o.height);
- });
- return {
-  sections:[...(state.sections||[]),...[...(state.roomAdded||[])].map(shapeCell)].map(({x,y,width,height})=>({x,y,width,height})),
-  obstacles:Engine.decomposition([...obstacles,...[...(state.roomRemoved||[])].map(shapeCell),...excluded]),
-  supply:state.supply?{...state.supply}:null,returnPoint:state.returnPoint?{...state.returnPoint}:null,
-  pipeStepMm:Number(state.pipeStepMm)||150,pipeDiameterMm:Number(state.pipeDiameterMm)||16,
-  wallOffsetMm:Number(state.wallOffsetMm)||0,minBendRadiusMm:requestedBendRadiusV10(),
-  maxCircuitLengthMm:(Number(state.maxCircuitLengthM)||100)*1000,
-  pattern:state.layoutUserChoiceV221||'auto',
-  deformationJoints:state.deformationJointsV260||state.deformationJoints||[],
-  coldWalls:typeof v222ColdWalls==='function'?v222ColdWalls():[],coldBandMm:Number(state.coldBandMm)||800,coldStepMm:Number(state.coldStepMm)||100
- };
-}
-function evaluate(candidate,params=input()){
- const plan=candidate.plan||{circuits:candidate.route?[{route:candidate.route,supply:params.supply,returnPoint:params.returnPoint}]:[]};
- const hard=Engine.validate(params,plan),quality=hard.ok?Engine.quality(params,plan):{score:0,values:{}};
- return candidate.engineeringV260={version:'2.9.1',hardOK:hard.ok,hard,score:quality.score,quality:quality.values,proven:hard.ok};
-}
-function lengths(plan){return plan.circuits.map(c=>(c.length/1000).toFixed(1)).join(' + ');}
-function word(n){return n===1?'контур':n<5?'контура':'контуров';}
-function clear(){state.route=[];state.routeCandidates=[];state.selectedRouteCandidate=null;state.enginePlanV1=null;state.routeComplete=false;state.v260Engineering=null;}
-function failure(message='Допустимый вариант не найден. Измените параметры или положение коллектора.'){
- clear();renderPlan();setStatus(message,true);
-}
-runEngineWorkerV1=function(params){return new Promise((resolve,reject)=>{
- const worker=new Worker('./engine-worker-v120.js?v=290-worker1');
- const finish=(error,result)=>{clearTimeout(timer);worker.terminate();if(cancelWorker===cancel)cancelWorker=null;error?reject(error):resolve(result);};
- const cancel=()=>finish(new Error('planner-cancelled'));
- const timer=setTimeout(()=>finish(new Error('planner-timeout')),300000);
- cancelWorker=cancel;
- worker.onmessage=e=>{const data=e.data,result=data?.result||data;finish(result?.ok?null:new Error(data?.error||result?.error||'planner-error'),result);};
- worker.onerror=e=>finish(new Error(e.message||'worker-error'));
- worker.postMessage(params);
-});};
-const reset=resetRoute;resetRoute=function(){generation++;cancelWorker?.();reset();};
-v221UpdateVariantButton=function(){const b=$('variantSwitchBtnV221');if(b)b.hidden=true;};
-v221RenderAlternatives=function(){
- const host=$('routeCandidates'),c=state.routeCandidates?.[0];if(!host)return;
- host.innerHTML=c?.engineeringV260?.proven?`<div class="route-card-v221 active"><span><b>${titles[c.kind]}</b><br>Проверенный вариант</span><span>${lengths(c.plan)} м</span></div>`:'';
- if($('routeSheetSubtitle'))$('routeSheetSubtitle').textContent='Результат';
- if($('routeSheetHelp'))$('routeSheetHelp').textContent='Warm показывает один проверенный вариант.';
-};
-renderPlan=function(){baseRender();v221UpdateVariantButton();const p=state.enginePlanV1;if(p?.planner==='unified-bcd'&&$('routeInfo'))$('routeInfo').textContent=`${p.circuits.length} ${word(p.circuits.length)} · ${lengths(p)} м`;};
-engineeringCircuitSvgV21=function(c,index){
- if(!c.bendRadiusMm)return baseCircuit(c,index);
- const curve=Engine.rounded(c.route,c.bendRadiusMm);if(!curve)return'';
- const points=curve.primitives.flatMap(p=>p.points.slice(0,-1)).concat(c.route.at(-1)),half=engineeringSplitRouteV21(points,.5);
- return `<g class="engineering-route-v21"><path class="pipe-halo" d="${curve.svg}"/><path class="pipe-supply" d="${curve.hotSvg}"/><path class="pipe-return" d="${curve.coldSvg}"/>${engineeringArrowSvgV21(half[0],'flow-arrow-supply')}${engineeringArrowSvgV21(half[1],'flow-arrow-return')}${engineeringFastenersSvgV21(points)}${engineeringCircuitLabelV21(points,index)}</g>`;
-};
-v221GenerateWithChoice=async function(){
- if(state.engineBusyV1)return;
- if(state.manualV2?.active)manualExitV2A();state.manualV2=blankManualStateV2A();
- collectInputs();recomputeGeometry();
- if(!state.supply||!state.returnPoint){setStatus('Укажите коллектор.',true);return;}
- const params=input(),snapshot=JSON.stringify(params),request=++generation;
- closeSheetV5();clear();state.engineBusyV1=true;renderPlan();setStatus('Рассчитываю схему…',false,{kind:'progress'});
- try{
-  const plan=await runEngineWorkerV1(params);
-  if(request!==generation)return;
-  if(snapshot!==JSON.stringify(input())){failure('Параметры изменились. Повторите расчёт.');return;}
-  if(!plan?.ok){failure();return;}
-  const candidate={id:'unified-best',kind:plan.kind,name:titles[plan.kind],plan,length:plan.totalLength,physicalReady:true};
-  if(!evaluate(candidate,params).proven){failure();return;}
-  state.routeCandidates=[candidate];state.selectedRouteCandidate=candidate.id;state.enginePlanV1=plan;state.routeKind=titles[plan.kind];state.routeComplete=true;state.v260Engineering=candidate.engineeringV260;
-  v221RenderAlternatives();renderPlan();setStatus(`Готово · проверено · ${plan.circuits.length} ${word(plan.circuits.length)}: ${lengths(plan)} м`);
- }catch(err){if(request===generation){console.error('Warm planner',err);failure('Расчёт не завершён. Попробуйте ещё раз.');}}
- finally{if(request===generation)state.engineBusyV1=false;v221UpdateVariantButton();}
-};
-// Remove any captured legacy callback, then bind the common entry point.
-const old=$('calculateLayoutV221');if(old)old.replaceWith(old.cloneNode(true));
-$('calculateLayoutV221')?.addEventListener('click',()=>v221GenerateWithChoice());
-globalThis.WarmV260={input,evaluateCandidate:evaluate,hardChecks:circuits=>Engine.validate(input(),{circuits})};
-document.querySelector('[data-layout-choice-v221="auto"] small')?.replaceChildren(document.createTextNode('Warm сам выберет проверенный вариант'));
-if($('calculateLayoutV221'))$('calculateLayoutV221').textContent='Рассчитать лучший вариант';
-document.querySelector('.eyebrow')?.replaceChildren(document.createTextNode('V2.9.1 · точки излома'));
-document.title='Тёплый пол — V2.9.1';
-const serialize=serializeState;serializeState=function(){const r=serialize();r.versionLabel='2.9.1';r.roomAdded=[...(state.roomAdded||[])];r.roomRemoved=[...(state.roomRemoved||[])];r.shapeStepMm=state.shapeStepMm;
- if(state.enginePlanV1?.planner==='unified-bcd')r.unifiedPlan=structuredClone(state.enginePlanV1);
- return r;
-};
-const load=loadScheme;loadScheme=function(raw){
- generation++;cancelWorker?.();state.engineBusyV1=false;clear();load(raw);state.roomAdded=new Set(raw?.roomAdded||[]);state.roomRemoved=new Set(raw?.roomRemoved||[]);state.shapeStepMm=Number(raw?.shapeStepMm)||100;recomputeGeometry();
- if(raw?.unifiedPlan){
-  const plan=structuredClone(raw.unifiedPlan);
-  for(const c of plan.circuits||[]){c.length=Engine.length(c.route||[]);c.coreLength=Engine.length(c.core||[]);}
-  plan.totalLength=(plan.circuits||[]).reduce((s,c)=>s+c.length,0);
-  const candidate={id:'unified-best',kind:plan.kind,name:titles[plan.kind],plan,length:plan.totalLength,physicalReady:true};
-  try{if(evaluate(candidate).proven){state.enginePlanV1=plan;state.routeCandidates=[candidate];state.selectedRouteCandidate=candidate.id;state.route=[];state.routeComplete=true;state.v260Engineering=candidate.engineeringV260;}else clear();}catch{clear();}
- }
- v221RenderAlternatives();renderPlan();
-};
-// The legacy flow button reverses points; maintain the new physical-outlet
-// metadata too, then revalidate the same geometry.
-const reverseFlow=v222ReverseCurrentFlow;v222ReverseCurrentFlow=function(){
- reverseFlow();const plan=state.enginePlanV1;if(plan?.planner!=='unified-bcd')return;
- for(const c of plan.circuits){const supply=c.supply;c.supply=c.returnPoint;c.returnPoint=supply;}
- const params=input();plan.manifold=Engine.manifoldPorts(Engine.normalize(params),plan.circuits.length,Engine.freeSpace(Engine.normalize(params)));
- const candidate=state.routeCandidates?.[0];if(candidate){state.v260Engineering=evaluate(candidate,params);state.routeComplete=state.v260Engineering.proven;}
- renderPlan();
-};
-const reverseButton=$('reverseFlowV222');if(reverseButton)reverseButton.replaceWith(reverseButton.cloneNode(true));
-$('reverseFlowV222')?.addEventListener('click',()=>v222ReverseCurrentFlow());
-})();
+const assert = require('node:assert/strict');
+const {chromium} = require('playwright');
+const fs = require('node:fs'), path = require('node:path'), http = require('node:http');
+const root = path.resolve(__dirname, '..');
+const fixture = require('./fixtures.cjs')[0].input;
+const legacyPlan = require('../engine-unified.js').plan({...fixture, pattern: 'spiral'});
+(async () => {
+  const server = http.createServer((req, res) => {
+    const file = path.resolve(root, '.' + decodeURIComponent(req.url.split('?')[0]));
+    if (!file.startsWith(root + path.sep)) { res.writeHead(403).end(); return; }
+    try { res.setHeader('Content-Type', file.endsWith('.js') ? 'text/javascript' : file.endsWith('.css') ? 'text/css' : 'text/html'); res.end(fs.readFileSync(file)); }
+    catch { res.writeHead(404).end(); }
+  });
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  let browser;
+  try {
+    browser = await chromium.launch({headless: true, ...(process.env.WARM_BROWSER ? {executablePath: process.env.WARM_BROWSER} : {})});
+    for (const mobile of [false, true]) {
+      const page = await browser.newPage({viewport: mobile ? {width: 390, height: 844} : {width: 1280, height: 900}, isMobile: mobile, hasTouch: mobile});
+      const errors = []; page.on('pageerror', e => errors.push(e.message));
+      const url = `http://127.0.0.1:${server.address().port}/index.html`;
+      await page.goto(url);
+      await page.locator('#createFirstBtn').click();
+      await page.waitForSelector('#shapeSheet.open');
+      await page.locator('#shapeWidthInput').fill('4.23');
+      await page.locator('#shapeHeightInput').fill('3.17');
+      await page.locator('#doneShapeV24').click();
+      const initial = await page.evaluate(() => WarmV300.project());
+      assert.equal(initial.room.sections[0].width, 4230);
+      assert.equal(initial.room.sections[0].height, 3170);
+      assert.equal(initial.grid.cellSizeMm, 150);
+      assert.equal(await page.evaluate(() => state.maxCircuitLengthM), 80);
+      assert.equal(await page.locator('.mounting-grid-v3').count(), 1);
+      await page.locator('#settingsBtn').click();
+      assert.deepEqual(await page.locator('#mountingGridInput option').evaluateAll(nodes => nodes.map(n => n.value)), ['100', '150', '200']);
+      assert.deepEqual(await page.locator('#pipeDiameterInput option').evaluateAll(nodes => nodes.map(n => n.value)), ['16', '17', '20']);
+      for (const size of ['100', '150', '200']) {
+        await page.locator('#mountingGridInput').selectOption(size);
+        assert.equal(await page.evaluate(() => WarmV300.grid().cellSizeMm), Number(size));
+        assert.deepEqual(await page.evaluate(() => WarmV300.project().room), initial.room);
+      }
+      await page.locator('#pipeDiameterInput').selectOption('17');
+      await page.evaluate(() => closeSheetV5());
+      await page.locator('#undoBtn').click();
+      assert.equal(await page.evaluate(() => state.pipeDiameterMm), 16);
+      await page.locator('#undoBtn').click();
+      assert.equal(await page.evaluate(() => state.mountingGridV3.cellSizeMm), 150);
+      await page.locator('#settingsBtn').click();
+      await page.locator('#mountingGridInput').selectOption('200');
+      await page.locator('#pipeDiameterInput').selectOption('20');
+      await page.locator('#nameInput').fill('Grid 3.0');
+      if (process.env.WARM_SCREENSHOTS) {
+        fs.mkdirSync(process.env.WARM_SCREENSHOTS, {recursive: true});
+        await page.locator('#mountingGridInput').scrollIntoViewIfNeeded();
+        await page.screenshot({path: path.join(process.env.WARM_SCREENSHOTS, `grid-settings-${mobile ? 'mobile' : 'desktop'}.png`)});
+      }
+      await page.locator('#saveBtn').click();
+      const saved = await page.evaluate(() => JSON.parse(localStorage.getItem(STORAGE_KEY))[0]);
+      assert.equal(saved.versionLabel, fs.readFileSync(path.join(root, 'VERSION.txt'), 'utf8').trim());
+      assert.equal(saved.projectV3.grid.cellSizeMm, 200);
+      assert.equal(saved.projectV3.pipe.diameterMm, 20);
+      assert.equal(saved.gridStepMm, 50, 'legacy raster precision stays independent');
+      await page.reload();
+      await page.getByRole('button', {name: 'Открыть', exact: true}).click();
+      assert.deepEqual(await page.evaluate(() => WarmV300.project()), saved.projectV3);
+      // Real shape tools still support corner cuts, rotation and undo.
+      await page.locator('#shapeToolBtn').click();
+      await page.locator('[data-v24-corner="tr"]').click();
+      await page.locator('#toggleCornerCutV24').click();
+      await page.locator('#doneShapeV24').click();
+      assert.ok((await page.evaluate(() => WarmV300.project().room.sections.length)) > 1);
+      const beforeRotate = await page.evaluate(() => WarmV300.project().room);
+      await page.locator('#rotateBtn').click();
+      assert.notDeepEqual(await page.evaluate(() => WarmV300.project().room), beforeRotate);
+      await page.locator('#undoBtn').click();
+      assert.deepEqual(await page.evaluate(() => WarmV300.project().room), beforeRotate);
+      // Import a legacy project with an exact off-grid column and independent painted cell.
+      const migration = await page.evaluate(() => {
+        const raw = serializeState(); delete raw.projectV3;
+        raw.versionLabel = '2.9.1'; raw.gridStepMm = 50; raw.pipeDiameterMm = 17;
+        raw.obstacles = [{id: 'column', x: 120, y: 120, width: 60, height: 60}];
+        raw.excluded = ['2,2', '3,3', '6,6']; raw.roomAdded = []; raw.roomRemoved = [];
+        loadScheme(raw);
+        const p = WarmV300.project(), again = serializeState(); loadScheme(again);
+        return {p, restored: WarmV300.project(), input: WarmV260.input(), status: $('status').textContent};
+      });
+      assert.equal(migration.p.exclusions.areas.length, 2);
+      assert.deepEqual(migration.p, migration.restored);
+      assert.equal(migration.input.obstacles.length, 2);
+      // Preserve the current route editor and serialize the live draft, not its
+      // previous automatic plan, into the new circuit records.
+      await page.evaluate(({fixture, legacyPlan}) => {
+        newScheme();
+        Object.assign(state, {sections: fixture.sections, obstacles: [], excluded: new Set(),
+          supply: fixture.supply, returnPoint: fixture.returnPoint, shapeType: 'custom', shapeParams: {}, shapeAxes: null,
+          enginePlanV1: legacyPlan, route: [], routeComplete: true});
+        syncInputs(); recomputeGeometry(); renderPlan();
+      }, {fixture, legacyPlan});
+      await page.waitForSelector('#shapeSheet.open');
+      await page.evaluate(() => closeSheetV5());
+      await page.locator('#manualToolBtn').click();
+      const midpoint = await page.evaluate(() => {
+        const r = WarmEditor.plan.circuits[0].route, a = r[3], b = r[4], m = planSvg.getScreenCTM();
+        return {x: m.a * (a.x + b.x) / 2 + m.e, y: m.d * (a.y + b.y) / 2 + m.f};
+      });
+      await page.mouse.click(midpoint.x, midpoint.y);
+      await page.locator('#editPlus').click();
+      const draft = await page.evaluate(() => {WarmEditor.autosave(); return serializeState();});
+      assert.deepEqual(draft.projectV3.circuits[0].legacyRoute, draft.editorDraft.plan.circuits[0].route);
+      assert.notDeepEqual(draft.projectV3.circuits[0].legacyRoute, legacyPlan.circuits[0].route);
+      await page.reload();
+      await page.locator('.edit-resume').click();
+      assert.deepEqual(await page.evaluate(() => WarmEditor.plan.circuits[0].route), draft.projectV3.circuits[0].legacyRoute);
+      await page.locator('#editUndo').click();
+      assert.deepEqual(await page.evaluate(() => WarmEditor.plan.circuits[0].route), legacyPlan.circuits[0].route);
+      await page.locator('#editDone').click();
+      assert.equal(await page.evaluate(() => WarmEditor.active), false);
+      assert.deepEqual(errors, []);
+      console.log(`PASS ${mobile ? 'mobile' : 'desktop'} grid / diameter / save-reload / migration / shape / rotation / undo / manual draft`);
+      await page.close();
+    }
+  } finally { if (browser) await browser.close(); server.close(); }
+})().catch(error => {console.error(error); process.exitCode = 1;});
