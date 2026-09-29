@@ -5677,7 +5677,7 @@ function engineInputV1(){
 }
 function runEngineWorkerV1(input){
   return new Promise((resolve,reject)=>{
-    const worker=new Worker(`./engine-worker-v120.js?v=310-recovery1${Date.now()}`);
+    const worker=new Worker(`./engine-worker-v120.js?v=320${Date.now()}`);
     const timer=setTimeout(()=>{try{worker.terminate();}catch{} reject(new Error('Расчёт занял больше 30 секунд'));},30000);
     worker.onmessage=(e)=>{clearTimeout(timer);worker.terminate();if(!e.data?.ok)reject(new Error(e.data?.error||'Ошибка движка'));else resolve(e.data.result);};
     worker.onerror=(e)=>{clearTimeout(timer);worker.terminate();reject(new Error(e.message||'Ошибка Web Worker'));};

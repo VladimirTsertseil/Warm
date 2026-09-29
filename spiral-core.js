@@ -109,7 +109,7 @@
     if (b.y > a.y) return [[a.ps[3], a.ps[2]], [b.ps[0], b.ps[1]], [a.ps[3], b.ps[0]], [a.ps[2], b.ps[1]]];
     return joins(ctx, b, a);
   }
-  function makeCycle(ctx, cells, clockwise) {
+  function makeCycle(ctx, cells, clockwise, pattern = 'spiral', vertical = false) {
     if (!cells.size) return null;
     const adjacency = new Map(), visited = new Set();
     const add = (a, b) => {adjacency.get(a.id).add(b.id); adjacency.get(b.id).add(a.id);};
@@ -125,7 +125,12 @@
     // unvisited arms. Splicing the cycles along this tree keeps one simple circuit.
     while (stack.length) {
       const current = stack.at(-1), turn = clockwise ? 1 : -1;
-      const order = [current.direction, (current.direction + turn + 4) % 4, (current.direction - turn + 4) % 4, (current.direction + 2) % 4];
+      let order = [current.direction, (current.direction + turn + 4) % 4, (current.direction - turn + 4) % 4, (current.direction + 2) % 4];
+      if (pattern === 'double-snake') {
+        const row = vertical ? (current.cell.x - seed.x) / 2 : (current.cell.y - seed.y) / 2;
+        const forward = vertical ? (Math.abs(row % 2) ? 3 : 1) : (Math.abs(row % 2) ? 2 : 0);
+        order = [forward, vertical ? 0 : 1, (forward + 2) % 4, vertical ? 2 : 3];
+      }
       let found = false;
       for (const d of order) {
         const [dx, dy] = directions[d], next = cells.get(key(current.cell.x + dx * 2, current.cell.y + dy * 2));
@@ -180,20 +185,33 @@
   function compile(ctx, route) {
     if (!Array.isArray(route) || route.length < 4 || route.some(p => !p || !Number.isFinite(p.x) || !Number.isFinite(p.y))) throw new Error('INVALID_ROUTE');
     const guides = route.slice(1).map((b, i) => guideRecord(ctx, route[i], b));
-    const R = ctx.o.radiusMm, segments = []; let cursor = route[0];
-    const line = (b, guide) => {if (distance(cursor, b) > EPS) segments.push({type: 'straight', from: {...cursor}, to: {...b}, guide, lengthMm: distance(cursor, b)}); cursor = b;};
+    return roundPath(route, ctx.o.radiusMm, guides);
+  }
+  // Shared exact fillets. Transit guides may be null; their geometry is still checked.
+  // Keep collinear part boundaries so lengths can be attributed without counting twice.
+  function roundPath(route, R, guides = [], parts = []) {
+    if (!Array.isArray(route) || route.length < 2 || !(R > 0) || !Number.isFinite(R) || route.some(p => !p || !Number.isFinite(p.x) || !Number.isFinite(p.y))) throw new Error('INVALID_ROUTE');
+    const segments = []; let cursor = route[0];
+    const line = (b, guide, part) => {if (distance(cursor, b) > EPS) segments.push({type: 'straight', from: {...cursor}, to: {...b}, guide: guide ?? null, lengthMm: distance(cursor, b), ...(part ? {part} : {})}); cursor = b;};
     for (let i = 1; i < route.length - 1; i++) {
       const a = route[i - 1], b = route[i], c = route[i + 1], ab = distance(a, b), bc = distance(b, c);
       const u = {x: (b.x - a.x) / ab, y: (b.y - a.y) / ab}, v = {x: (c.x - b.x) / bc, y: (c.y - b.y) / bc};
-      if (Math.abs(u.x * v.x + u.y * v.y) > EPS) throw new Error('INVALID_TURN');
+      if (!ab || !bc || (Math.abs(u.x) > EPS && Math.abs(u.y) > EPS) || (Math.abs(v.x) > EPS && Math.abs(v.y) > EPS)) throw new Error('INVALID_TURN');
+      const dot = u.x * v.x + u.y * v.y;
+      if (dot > 1 - EPS) {line(b, guides[i - 1], parts[i - 1]); continue;}
+      if (Math.abs(dot) > EPS) throw new Error('INVALID_TURN');
       const from = {x: b.x - u.x * R, y: b.y - u.y * R}, to = {x: b.x + v.x * R, y: b.y + v.y * R};
       if ((from.x - cursor.x) * u.x + (from.y - cursor.y) * u.y < -EPS || bc < R - EPS) throw new Error('RADIUS_DOES_NOT_FIT');
-      line(from, guides[i - 1]);
+      line(from, guides[i - 1], parts[i - 1]);
       const center = {x: from.x + v.x * R, y: from.y + v.y * R}, delta = (u.x * v.y - u.y * v.x) * Math.PI / 2;
-      segments.push({type: 'curve', from, to, center, radiusMm: R, startAngle: Math.atan2(from.y - center.y, from.x - center.x), sweepAngle: delta, lengthMm: Math.abs(delta) * R});
+      const part = parts[i - 1] === 'supply' || parts[i] === 'supply' ? 'supply' : parts[i - 1] === 'return' || parts[i] === 'return' ? 'return' : parts[i];
+      segments.push({type: 'curve', from, to, center, radiusMm: R, startAngle: Math.atan2(from.y - center.y, from.x - center.x), sweepAngle: delta, lengthMm: Math.abs(delta) * R, ...(part ? {part} : {})});
       cursor = to;
     }
-    line(route.at(-1), guides.at(-1));
+    const last = route.at(-1), previous = route.at(-2);
+    if ((Math.abs(last.x - previous.x) > EPS && Math.abs(last.y - previous.y) > EPS) || same(last, previous)) throw new Error('INVALID_TURN');
+    if ((last.x - cursor.x) * (last.x - previous.x) + (last.y - cursor.y) * (last.y - previous.y) < -EPS) throw new Error('RADIUS_DOES_NOT_FIT');
+    line(last, guides.at(-1), parts.at(-1));
     return segments;
   }
   function arcParameter(arc, angle) {
@@ -318,5 +336,6 @@
     }
     return svgPath(parts);
   }
-  return {plan, validate, svgPath, pathRange, arcAt};
+  return {plan, validate, svgPath, pathRange, arcAt,
+    geometry: {prepare, connected, cellsFor, makeCycle, compile, roundPath, checkSegments, coversLattice, routeGridPoints, guideRecord, intersections, arcInside}};
 });

@@ -5,17 +5,17 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
   <meta name="theme-color" content="#f8fafc" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-  <title>Тёплый пол — V3.1</title>
+  <title>Тёплый пол — V3.2</title>
   <link rel="manifest" href="manifest.webmanifest" />
-  <link rel="stylesheet" href="styles-v120.css?v=310-recovery1" />
-  <link rel="stylesheet" href="styles-v24.css?v=310-recovery1">
-  <link rel="stylesheet" href="notifications.css?v=310-recovery1">
-  <link rel="stylesheet" href="mobile-editor.css?v=310-recovery1">
+  <link rel="stylesheet" href="styles-v120.css?v=320" />
+  <link rel="stylesheet" href="styles-v24.css?v=320">
+  <link rel="stylesheet" href="notifications.css?v=320">
+  <link rel="stylesheet" href="mobile-editor.css?v=320">
 </head>
 <body>
   <div class="app-shell">
     <header class="home-topbar">
-      <div><div class="eyebrow">V3.1 · улитка по сетке</div><h1>Тёплый пол</h1></div>
+      <div><div class="eyebrow">V3.2 · контур с подводами</div><h1>Тёплый пол</h1></div>
       <button id="newSchemeBtn" class="ghost-btn">Новая</button>
     </header>
 
@@ -203,17 +203,19 @@
           <p class="sheet-help">Цвета и номера показывают будущий порядок прохождения. Зоны можно переставлять, объединять с соседней и снова разделять. Способ укладки сохраняется отдельно для каждой зоны.</p>
         </section>
 
-        <section id="spiralSheetV31" class="bottom-sheet" aria-label="Улитка по сетке">
+        <section id="spiralSheetV31" class="bottom-sheet" aria-label="Контур по сетке">
           <div class="sheet-grabber"></div>
-          <div class="sheet-head"><div><strong>Улитка по сетке</strong><span id="spiralPitchInfo"></span></div><button id="closeSpiralV31" type="button" class="round-btn mini" aria-label="Закрыть настройки улитки">×</button></div>
+          <div class="sheet-head"><div><strong>Контур по сетке</strong><span id="spiralPitchInfo"></span></div><button id="closeSpiralV31" type="button" class="round-btn mini" aria-label="Закрыть настройки расчёта">×</button></div>
           <div class="settings-grid">
+            <label>Способ укладки<select id="circuitMethodV32"><option value="auto">Авто: улитка, затем двойная змейка</option><option value="spiral">Улитка</option><option value="double-snake">Двойная змейка</option></select></label>
             <label>Радиус поворота, мм<input id="spiralRadiusInput" type="number" min="1" step="1" inputmode="decimal" placeholder="Укажите вручную"></label>
             <label>Шаг, ячеек сетки<input id="spiralSpacingInput" type="number" min="1" step="1" value="1" inputmode="numeric"></label>
-            <label>Отступ оси от границ, мм<input id="spiralOffsetInput" type="number" min="0" step="10" value="100" inputmode="decimal"></label>
+            <label>Отступ рабочей части, мм<input id="spiralOffsetInput" type="number" min="0" step="10" value="100" inputmode="decimal"></label>
           </div>
           <p class="sheet-help">Задайте радиус, допустимый для вашей трубы. Зависимость радиуса от диаметра пока не задана. Шаг укладки — целое число ячеек монтажной сетки.</p>
-          <p id="spiralResultV31" class="sheet-help" role="status">Одна рабочая улитка. Подводы к коллектору — следующий этап.</p>
-          <button id="calculateSpiralV31" type="button" class="primary-btn wide">Построить улитку</button>
+          <p id="spiralResultV31" class="sheet-help" role="status">Один полный контур от подачи до обратки, с учётом длины подводов.</p>
+          <button id="calculateSpiralV31" type="button" class="primary-btn wide">Построить контур</button>
+          <button id="setCollectorV32" type="button" class="secondary-btn wide top-gap">Установить / перенести коллектор</button>
           <button id="legacyCalculationV31" type="button" class="secondary-btn wide top-gap">Прежний расчёт и правка</button>
         </section>
 
@@ -361,20 +363,21 @@
     <div class="feedback-dialog-head"><strong id="feedbackDialogTitle">Сообщение</strong><button id="feedbackDialogClose" class="feedback-button" type="button" aria-label="Закрыть сообщение" autofocus>×</button></div>
     <p id="feedbackDialogText"></p>
   </dialog>
-  <script src="engine-core-v120.js?v=310-recovery1"></script>
-  <script src="app-v120.js?v=310-recovery1"></script>
-  <script src="layout-patterns-v232.js?v=310-recovery1"></script>
-  <script src="app-v232.js?v=310-recovery1"></script>
-  <script src="shape-v24.js?v=310-recovery1"></script>
-  <script src="app-v24.js?v=310-recovery1"></script>
-  <script src="engine-unified.js?v=310-recovery1"></script>
-  <script src="app-v260.js?v=310-recovery1"></script>
-  <script src="notifications.js?v=310-recovery1"></script>
-  <script src="editor-core.js?v=310-recovery1"></script>
-  <script src="grid-core.js?v=310-recovery1"></script>
-  <script src="app-v300.js?v=310-recovery1"></script>
-  <script src="mobile-editor.js?v=310-recovery1"></script>
-  <script src="spiral-core.js?v=310-recovery1"></script>
-  <script src="app-v310.js?v=310-recovery1"></script>
+  <script src="engine-core-v120.js?v=320"></script>
+  <script src="app-v120.js?v=320"></script>
+  <script src="layout-patterns-v232.js?v=320"></script>
+  <script src="app-v232.js?v=320"></script>
+  <script src="shape-v24.js?v=320"></script>
+  <script src="app-v24.js?v=320"></script>
+  <script src="engine-unified.js?v=320"></script>
+  <script src="app-v260.js?v=320"></script>
+  <script src="notifications.js?v=320"></script>
+  <script src="editor-core.js?v=320"></script>
+  <script src="grid-core.js?v=320"></script>
+  <script src="app-v300.js?v=320"></script>
+  <script src="mobile-editor.js?v=320"></script>
+  <script src="spiral-core.js?v=320"></script>
+  <script src="circuit-core.js?v=320"></script>
+  <script src="app-v320.js?v=320"></script>
 </body>
 </html>
