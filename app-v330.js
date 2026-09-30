@@ -7,7 +7,8 @@
   let selected = 'grid-circuit-1', savedKey = '', generation = 0, worker = null, cancelPending = null, picking = null;
   const current = () => state.circuitDefinitionsV33.find(d => d.id === selected) || state.circuitDefinitionsV33[0];
   const definitions = () => state.circuitDefinitionsV33.map(d => ({id: d.id, name: d.name, zone: copy(d.zone),
-    supply: copy(d.portsFromMain ? state.supply : d.supply), returnPoint: copy(d.portsFromMain ? state.returnPoint : d.returnPoint)}));
+    supply: copy(d.portsFromMain ? state.supply : d.supply), returnPoint: copy(d.portsFromMain ? state.returnPoint : d.returnPoint),
+    ...(d.automatic ? {automatic:true, heatingRemoved:copy(d.heatingRemoved||[])} : {})}));
   const project = () => WarmV300.project();
   const signature = () => {const p = project(); return JSON.stringify([p.room, p.grid, p.exclusions, p.pipe, definitions(), state.circuitSettingsV32]);};
   const metre = mm => (mm / 1000).toFixed(1).replace('.', ','), area = mm => (mm / 1e6).toFixed(2).replace('.', ',');
@@ -136,7 +137,7 @@
   };
   function inWorker(p, settings, defs) {
     return new Promise((resolve, reject) => {
-      const w = worker = new Worker('./multi-worker.js?v=340'); let timer;
+      const w = worker = new Worker('./multi-worker.js?v=350'); let timer;
       const finish = (error, result) => {clearTimeout(timer); w.terminate(); if (worker === w) {worker = null; cancelPending = null;} error ? reject(error) : resolve(result);};
       const arm = () => {clearTimeout(timer); timer = setTimeout(() => finish(new Error('TIMEOUT')), 30000);};
       cancelPending = () => finish(null, null); arm();
@@ -227,6 +228,12 @@
     } catch {setStatus('Не удалось создать изображение. Повторите экспорт.', true);} finally {URL.revokeObjectURL(url);}
   };
   document.title = 'Тёплый пол — V3.3'; document.querySelector('.eyebrow').textContent = 'V3.3 · несколько контуров';
-  globalThis.WarmV330 = {calculate, get definitions() {return definitions();}, get plan() {return state.multiPlanV33 || WarmV320.plan;}};
+  function accept(result) {
+    if (!M.validate(project(),result.settings,result.definitions,result).ok) throw new Error('INVALID_PLAN');
+    state.circuitSettingsV32=copy(result.settings);
+    state.circuitDefinitionsV33=result.definitions.map(d=>({...copy(d),portsFromMain:false}));
+    state.circuitPlanV32=null;state.multiPlanV33=copy(result);savedKey=signature();state.routeComplete=true;sync();
+  }
+  globalThis.WarmV330 = {calculate, accept, get definitions() {return definitions();}, get plan() {return state.multiPlanV33 || WarmV320.plan;}};
   sync();
 })();

@@ -1,8 +1,8 @@
 /* Warm 3.4. Editable control points + explicit gaps. Compiled arcs are never trusted on load. */
 (function(root, factory) {
-  if (typeof module === 'object' && module.exports) module.exports = factory(require('./grid-core.js'), require('./spiral-core.js'), require('./circuit-core.js'), require('./multi-core.js'));
-  else root.WarmGridEditor = factory(root.WarmGrid, root.WarmSpiral, root.WarmCircuit, root.WarmMulti);
-})(globalThis, function(G, S, C, M) {
+  if (typeof module === 'object' && module.exports) module.exports = factory(require('./grid-core.js'), require('./spiral-core.js'), require('./circuit-core.js'), require('./multi-core.js'),require('./auto-geometry.js'));
+  else root.WarmGridEditor = factory(root.WarmGrid, root.WarmSpiral, root.WarmCircuit, root.WarmMulti,root.WarmAutoGeometry);
+})(globalThis, function(G, S, C, M, V) {
   'use strict';
   const H = S.geometry, EPS = 1e-6, parts = ['supply', 'heating', 'return'];
   const copy = x => structuredClone(x), distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y), same = (a, b) => a && b && distance(a, b) < EPS;
@@ -126,6 +126,10 @@
     }
     if (ctx.coverage.unassignedAreaMm2 > EPS) add('UNASSIGNED_AREA');
     const warnings = circuits.filter(c => c.lengthMm > 80000).map(c => ({code: 'CIRCUIT_LENGTH_OVER_80M', id: c.id}));
+    if (draft.definitions.some(d=>d.automatic)) {
+      warnings.forEach(w=>add(w.code,w.id));
+      if(circuits.every(c=>c.valid) && !V.coverage(ctx.p,draft.settings,circuits.map(c=>c.circuit)).ok) add('INCOMPLETE_COVERAGE');
+    }
     const complete = issues.length === 0;
     return {ok: complete, complete, issues, warnings, circuits, coverage: ctx.coverage,
       lengthMm: circuits.every(c => c.lengthMm != null) ? circuits.reduce((n, c) => n + c.lengthMm, 0) : null};

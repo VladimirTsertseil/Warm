@@ -166,5 +166,17 @@
       return {ok: true, circuit};
     } catch (e) {return {ok: false, reason: e.message};}
   }
-  return {plan, validate, rebuild};
+  // Build a complete candidate supplied by the automatic allocator. The same
+  // exact line/arc, guide, boundary and intersection checks apply as in plan().
+  function fromPaths(project, settings, paths, method = 'spiral', context = {}) {
+    try {
+      const ctx = prepare(project, settings, context);
+      const circuit = assemble(ctx, paths.heating, paths.supply, paths.return, method);
+      const overLength = circuit.lengthMm > 80000;
+      return {ok: true, status: 'ROUTE_OK', planner: 'grid-circuit-v32', scope: 'complete', settings: ctx.settings,
+        method, circuits: [circuit], lengthMm: circuit.lengthMm, needsTransit: false, overLength,
+        warnings: overLength ? ['CIRCUIT_LENGTH_OVER_80M'] : [], fallbackUsed: ctx.settings.method === 'auto' && method === 'double-snake', attempts: []};
+    } catch (e) {return fail(e.message);}
+  }
+  return {plan, validate, rebuild, fromPaths};
 });

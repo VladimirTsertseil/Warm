@@ -1,10 +1,13 @@
 /* Warm 3.3. User-defined zones and port pairs; no automatic circuit count. */
 (function(root, factory) {
-  if (typeof module === 'object' && module.exports) module.exports = factory(require('./grid-core.js'), require('./circuit-core.js'), require('./spiral-core.js'));
-  else root.WarmMulti = factory(root.WarmGrid, root.WarmCircuit, root.WarmSpiral);
-})(globalThis, function(G, C, S) {
+  if (typeof module === 'object' && module.exports) module.exports = factory(require('./grid-core.js'), require('./circuit-core.js'), require('./spiral-core.js'), require('./auto-geometry.js'));
+  else root.WarmMulti = factory(root.WarmGrid, root.WarmCircuit, root.WarmSpiral, root.WarmAutoGeometry);
+})(globalThis, function(G, C, S, V) {
   'use strict';
-  const EPS = 1e-6, copy = x => structuredClone(x), equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const EPS = 1e-6, copy = x => structuredClone(x);
+  // Property insertion order changes across UI adapters and JSON imports.
+  const canonical=x=>Array.isArray(x)?x.map(canonical):x&&typeof x==='object'?Object.fromEntries(Object.keys(x).sort().map(k=>[k,canonical(x[k])])):x;
+  const equal = (a,b) => JSON.stringify(canonical(a))===JSON.stringify(canonical(b));
   const fail = reason => ({ok: false, status: 'MULTI_IMPOSSIBLE', reason, circuits: []});
   const inside = (r, x, y) => x > r.x && x < r.x + r.width && y > r.y && y < r.y + r.height;
   function clip(a, b) {
@@ -13,8 +16,9 @@
     return width > EPS && height > EPS ? {x, y, width, height} : null;
   }
   function zoneProject(p, d) {
-    const sections = d.zone ? p.room.sections.map(r => clip(r, d.zone)).filter(Boolean) : p.room.sections;
-    return G.createProject({...p, room: {...p.room, sections}, collector: {supply: d.supply, returnPoint: d.returnPoint}, circuits: []});
+    let sections = d.zone ? p.room.sections.map(r => clip(r, d.zone)).filter(Boolean) : p.room.sections;
+    if (d.heatingClip) sections = sections.map(r => clip(r, d.heatingClip)).filter(Boolean);
+    return G.createProject({...p, room: {...p.room, sections, removedAreas:[...p.room.removedAreas,...(d.heatingRemoved||[])]}, collector: {supply: d.supply, returnPoint: d.returnPoint}, circuits: []});
   }
   function prepare(project, definitions) {
     const p = G.createProject(project);
@@ -88,11 +92,18 @@
         } else if (typeof r.reason !== 'string' || !r.reason) throw new Error('INVALID_RESULT');
       }
       if (!equal(result, resultFor(ctx, settings, result.results))) throw new Error('INVALID_METADATA');
+      if (ctx.defs.some(d => d.automatic)) {
+        if (!result.complete || result.overLength) throw new Error('INCOMPLETE_PLAN');
+        if (!V.coverage(ctx.p, settings, result.circuits).ok) throw new Error('INCOMPLETE_COVERAGE');
+      }
       return {ok: true, complete: result.complete};
     } catch (e) {return {ok: false, reason: e.message};}
   }
   function crossIntersections(circuits, binSize = 150) {
     return S.geometry.intersections(circuits.flatMap(c => c.segments), binSize, circuits.flatMap((c, i) => c.segments.map(() => i)));
   }
-  return {plan, validate, measure, zoneProject, crossIntersections, prepare};
+  function compose(project, settings, definitions, results) {
+    return resultFor(prepare(project, definitions), settings, results);
+  }
+  return {plan, validate, measure, zoneProject, crossIntersections, prepare, compose};
 });

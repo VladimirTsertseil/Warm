@@ -187,7 +187,7 @@
   el('geCancelSearch').onclick = () => {cancelWorker(); renderPanel(); setStatus('Поиск остановлен. Правки сохранены.');};
   el('geReplan').onclick = async () => {
     if (worker || stale()) return; const request = ++generation, key = contextKey(), id = selectedId();
-    const work = new Promise((resolve, reject) => {const w = worker = new Worker('./grid-editor-worker.js?v=340'); const timer = setTimeout(() => finish(new Error('TIMEOUT')), 30000);
+    const work = new Promise((resolve, reject) => {const w = worker = new Worker('./grid-editor-worker.js?v=350'); const timer = setTimeout(() => finish(new Error('TIMEOUT')), 30000);
       const finish = (error, data) => {clearTimeout(timer); w.terminate(); if (worker === w) {worker = null; cancelPending = null;} error ? reject(error) : resolve(data);};
       cancelPending = () => finish(null, null); w.onmessage = e => finish(null, e.data); w.onerror = () => finish(new Error('CALCULATION_FAILED'));
       w.postMessage({project: project(), draft: copy(edit.draft), id, method: el('geMethod').value});
@@ -258,5 +258,8 @@
     } catch {setStatus('Не удалось создать изображение.', true);} finally {URL.revokeObjectURL(url);}
   };
   document.title = 'Тёплый пол — V3.4'; document.querySelector('.eyebrow').textContent = 'V3.4 · монтажная правка';
-  globalThis.WarmV340 = {enter, leave, saveDraft, get active() {return active;}, get draft() {return edit ? copy(edit.draft) : null;}, get report() {return inspect();}, get selection() {return copy(selection);}, get busy() {return !!worker;}};
+  function clearForAutomatic() {
+    if(edit)saveDraft();cancelWorker();clearTimeout(saveTimer);edit=null;active=false;selection=drawing=null;undo=[];redo=[];report=null;reportKey='';panel.hidden=true;document.body.classList.remove('grid-editor-active-v34');
+  }
+  globalThis.WarmV340 = {enter, leave, saveDraft, clearForAutomatic, get active() {return active;}, get draft() {return edit ? copy(edit.draft) : null;}, get report() {return inspect();}, get selection() {return copy(selection);}, get busy() {return !!worker;}};
 })();

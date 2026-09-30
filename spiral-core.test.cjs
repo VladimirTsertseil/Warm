@@ -1,58 +1,80 @@
-/* Optional integration checks: npm install --no-save playwright */
-const assert=require('node:assert/strict');
-const {chromium}=require('playwright');
-const fs=require('node:fs'),path=require('node:path'),http=require('node:http');
-const fixtures=require('./fixtures.cjs');
-(async()=>{
- const root=path.resolve(__dirname,'..');
- const server=http.createServer((req,res)=>{const p=path.resolve(root,'.'+decodeURIComponent(req.url.split('?')[0]));if(!p.startsWith(root+path.sep)){res.statusCode=403;res.end();return;}try{res.setHeader('Content-Type',p.endsWith('.js')?'text/javascript':p.endsWith('.css')?'text/css':'text/html');res.end(fs.readFileSync(p));}catch{res.statusCode=404;res.end();}});
- await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
- let browser;
- try{
-  browser=await chromium.launch({headless:true,...(process.env.WARM_BROWSER?{executablePath:process.env.WARM_BROWSER}:{})});
-  const page=await browser.newPage({viewport:{width:1280,height:900}}),errors=[];
-  page.on('pageerror',e=>errors.push(e.message));
-  await page.goto(`http://127.0.0.1:${server.address().port}/index.html`);
-  const scenarios=[[0,'auto'],[1,'spiral'],[1,'snake'],[1,'double-snake'],[1,'adaptive'],[6,'spiral'],[9,'spiral'],[8,'auto'],[10,'auto']];
-  for(const [index,pattern] of process.env.WARM_SMOKE?scenarios.slice(0,1):scenarios){
-   await page.evaluate(({input,name})=>{
-    newScheme();
-    Object.assign(state,{sections:input.sections,obstacles:input.obstacles,supply:input.supply,returnPoint:input.returnPoint,excluded:new Set(),roomAdded:new Set(),roomRemoved:new Set(),shapeType:'custom',shapeParams:{},shapeAxes:null,pipeStepMm:input.pipeStepMm,wallOffsetMm:input.wallOffsetMm,pipeDiameterMm:input.pipeDiameterMm,maxCircuitLengthM:input.maxCircuitLengthMm/1000,bendRadiusMode:'auto',name});
-    recomputeGeometry();syncInputs();syncBendUiV10();showView('editor');fitPlan(false);renderPlan();
-   },fixtures[index]);
-   await page.waitForSelector('#shapeSheet.open');
-   await page.evaluate(()=>closeSheetV5());
-   await page.locator('#generateBtn').click();
-   await page.locator('#legacyCalculationV31').click();
-   await page.locator(`[data-layout-choice-v221="${pattern}"]`).click();
-   await page.locator('#calculateLayoutV221').click();
-   await page.waitForFunction(()=>!state.engineBusyV1,null,{timeout:305000});
-   const result=await page.evaluate(()=>({ok:state.routeComplete,kind:state.enginePlanV1?.kind,planner:state.enginePlanV1?.planner,candidates:state.routeCandidates.length,status:document.getElementById('status').textContent,arcs:document.querySelector('.engineering-route-v21 .pipe-supply')?.getAttribute('d'),cold:document.querySelector('.engineering-route-v21 .pipe-return')?.getAttribute('d'),version:serializeState().versionLabel}));
-   assert.equal(result.ok,true,JSON.stringify(result));assert.equal(result.planner,'unified-bcd');assert.equal(result.candidates,1);assert.equal(result.version,fs.readFileSync(path.join(root,'VERSION.txt'),'utf8').trim());if(pattern!=='auto')assert.equal(result.kind,pattern);assert.match(result.arcs,/ A 80 80 /);assert.doesNotMatch(result.status,/BCD|score|fallback|V2\.3/);
-   assert.notEqual(result.arcs,result.cold,'supply and return are different halves of the same curve');
-   console.log('PASS',fixtures[index].name,pattern,result.status);
-   if(process.env.WARM_SCREENSHOTS){fs.mkdirSync(process.env.WARM_SCREENSHOTS,{recursive:true});await page.locator('#planSvg').screenshot({path:path.join(process.env.WARM_SCREENSHOTS,`${fixtures[index].name}-${pattern}.png`)});}
+const test = require('node:test'), assert = require('node:assert/strict');
+const G = require('../grid-core.js'), M = require('../multi-core.js'), C = require('../circuit-core.js');
+const rect = (x, y, width, height) => ({x, y, width, height});
+const settings = {radiusMm: 40, spacingCells: 1, wallOffsetMm: 100, method: 'auto'};
+const project = (n = 2) => G.createProject({room: {sections: [rect(0, 0, n * 2400, 2400)]}});
+const definitions = (n = 2) => Array.from({length: n}, (_, i) => ({id: `c${i + 1}`, name: `Контур ${i + 1}`, zone: rect(i * 2400, 0, 2400, 2400), supply: {x: i * 2400 + 600, y: 2400}, returnPoint: {x: i * 2400 + 650, y: 2400}}));
+function verify(p, defs, r, options = settings) {
+  assert.equal(r.ok, true, JSON.stringify(r)); assert.equal(r.complete, true, JSON.stringify(r.results.map(c => c.reason)));
+  assert.equal(r.circuits.length, defs.length); assert.equal(M.validate(p, options, defs, r).ok, true);
+  assert.equal(M.crossIntersections(r.circuits), false);
+  assert.equal(r.lengthMm, r.circuits.reduce((n, c) => n + c.lengthMm, 0));
+  r.circuits.forEach((c, i) => {assert.equal(c.id, defs[i].id); assert.deepEqual(c.supply, defs[i].supply); assert.deepEqual(c.returnPoint, defs[i].returnPoint);});
+}
+test('two independent zones, exact ports, no mutation, complete coverage', () => {
+  const p = project(), defs = definitions(), before = JSON.stringify([p, defs]), r = M.plan(p, settings, defs); verify(p, defs, r); assert.equal(JSON.stringify([p, defs]), before);
+});
+test('14 user-selected circuits, no 10/13 count ceiling', () => {
+  const p = project(14), defs = definitions(14), progress = [], r = M.plan(p, settings, defs, p => progress.push(p)); verify(p, defs, r); assert.equal(progress.length, 14);
+});
+test('four adjacent collector ports feed different zones through the full room', () => {
+  const p = project(), defs = definitions(); defs[1].supply.x = 700; defs[1].returnPoint.x = 750;
+  const r = M.plan(p, settings, defs); verify(p, defs, r);
+  assert.ok(r.circuits[1].supplyTransit.segments.some(s => s.from.x < defs[1].zone.x));
+});
+test('disconnected rooms work as separately assigned circuits; transits cannot jump gaps', () => {
+  const p = G.createProject({room: {sections: [rect(0, 0, 2400, 2400), rect(3000, 0, 2400, 2400)]}}), defs = definitions();
+  defs[1].zone.x = 3000; defs[1].supply.x = 3600; defs[1].returnPoint.x = 3650;
+  verify(p, defs, M.plan(p, settings, defs));
+});
+test('explicit double snake for multiple circuits', () => {
+  const p = project(), defs = definitions(), options = {...settings, method: 'double-snake'}, r = M.plan(p, options, defs); verify(p, defs, r, options); assert.ok(r.circuits.every(c => c.method === 'double-snake'));
+});
+test('overlap, unset zones, empty zones and duplicate IDs are rejected', () => {
+  const p = project();
+  for (const [edit, reason] of [
+    [d => d[1].zone.x = 2000, 'ZONES_OVERLAP'], [d => d[0].zone = null, 'ZONES_REQUIRED'],
+    [d => d[1].zone.x = 9000, 'EMPTY_ZONE'], [d => d[1].id = d[0].id, 'INVALID_CIRCUIT_ID'],
+    [d => d[0].zone.width = 0, 'INVALID_ZONE']]) {const defs = definitions(); edit(defs); assert.equal(M.plan(p, settings, defs).reason, reason);}
+});
+test('tiny unassigned strips are measured and do not claim completion', () => {
+  const p = project(), defs = definitions(); defs[1].zone.x += 0.2; defs[1].zone.width -= 0.2;
+  const r = M.plan(p, settings, defs); assert.equal(r.complete, false); assert.ok(Math.abs(r.coverage.unassignedAreaMm2 - 480) < 1e-6); assert.ok(r.warnings.includes('UNASSIGNED_AREA')); assert.equal(M.validate(p, settings, defs, r).ok, true);
+});
+test('failed circuit preserves valid neighbours and cannot be marked complete', () => {
+  const p = project(), defs = definitions(); defs[1].supply = null;
+  const r = M.plan(p, settings, defs); assert.equal(r.status, 'MULTI_PARTIAL'); assert.equal(r.circuits.length, 1); assert.equal(r.results[1].reason, 'COLLECTOR_REQUIRED'); assert.equal(M.validate(p, settings, defs, r).ok, true);
+  r.complete = true; assert.equal(M.validate(p, settings, defs, r).ok, false);
+});
+test('independent intersection checks include adjacent array indices, shared endpoints, arcs and tangency', () => {
+  const line = (a, b) => ({type: 'straight', from: a, to: b});
+  const arc = {type: 'curve', from: {x: 10, y: 0}, to: {x: 0, y: 10}, center: {x: 0, y: 0}, radiusMm: 10, startAngle: 0, sweepAngle: Math.PI / 2};
+  for (const [a, b] of [[line({x: 0, y: 0}, {x: 20, y: 0}), line({x: 10, y: -5}, {x: 10, y: 5})],
+    [line({x: 0, y: 0}, {x: 10, y: 0}), line({x: 10, y: 0}, {x: 20, y: 0})],
+    [arc, line({x: 10, y: -5}, {x: 10, y: 5})], [arc, structuredClone(arc)]]) assert.equal(M.crossIntersections([{segments: [a]}, {segments: [b]}]), true);
+});
+test('occupied circuits affect the search and are rechecked during validation', () => {
+  const defs = definitions(1), p = project(1), zone = M.zoneProject(p, defs[0]), first = C.plan(zone, settings);
+  assert.equal(first.ok, true); assert.equal(C.validate(zone, settings, first, {occupied: first.circuits[0].segments}).reason, 'CIRCUIT_INTERSECTION');
+  // An occupied pipe along the entire port wall makes every possible connection invalid.
+  const occupied = [{type: 'straight', from: {x: 0, y: 2400}, to: {x: 2400, y: 2400}}];
+  assert.equal(C.plan(zone, settings, {occupied}).ok, false);
+});
+test('save validation rejects changed ports, exclusions, routes, totals and definitions', () => {
+  const p = project(), defs = definitions(), r = M.plan(p, settings, defs);
+  for (const edit of [r => r.lengthMm++, r => r.circuits[0].segments[0].lengthMm++, r => r.results[0].plan.circuits[0].supplyTransit.route[0].x++, r => r.coverage.unassignedAreaMm2 = 1, r => r.definitions[0].zone.width--]) {
+    const q = structuredClone(r); edit(q); assert.equal(M.validate(p, settings, defs, q).ok, false);
   }
-  const restored=await page.evaluate(()=>{const saved=serializeState(),count=saved.unifiedPlan.circuits.length;loadScheme(saved);const loaded=state.enginePlanV1?.circuits.length===count&&state.routeComplete;v222ReverseCurrentFlow();return{loaded,reversed:state.v260Engineering?.proven};});
-  assert.deepEqual(restored,{loaded:true,reversed:true});console.log('PASS save / restore / reverse flow');
-  // The adapter includes painted geometry, and a calculation that finishes after
-  // an edit cannot publish a stale route.
-  const stale=await page.evaluate(async()=>{
-   state.roomAdded=new Set(['90,90']);state.roomRemoved=new Set(['1,1']);state.excluded=new Set(['2,2']);
-   const painted=WarmV260.input();state.roomAdded.clear();state.roomRemoved.clear();state.excluded.clear();
-   const original=runEngineWorkerV1;let release;runEngineWorkerV1=()=>new Promise(r=>release=r);
-   const pending=v221GenerateWithChoice();state.pipeStepMm+=50;release({ok:false});await pending;runEngineWorkerV1=original;
-   return{hasPaint:painted.sections.some(r=>r.x===9000)&&painted.obstacles.length>0,route:state.enginePlanV1,status:document.getElementById('status').textContent};
-  });
-  assert.equal(stale.hasPaint,true);assert.equal(stale.route,null);assert.match(stale.status,/Параметры изменились/);
-  const overlapping=await page.evaluate(async()=>{
-   const original=runEngineWorkerV1,releases=[];runEngineWorkerV1=()=>new Promise(r=>releases.push(r));
-   const first=v221GenerateWithChoice();resetRoute();const second=v221GenerateWithChoice();
-   releases[0]({ok:false});await first;const stillBusy=state.engineBusyV1;
-   releases[1]({ok:false});await second;runEngineWorkerV1=original;
-   return{stillBusy,finished:!state.engineBusyV1,route:state.enginePlanV1};
-  });
-  assert.deepEqual(overlapping,{stillBusy:true,finished:true,route:null});
-  assert.deepEqual(errors,[]);console.log('PASS painted geometry / stale result / console');
- }finally{if(browser)await browser.close();server.close();}
-})().catch(err=>{console.error(err);process.exitCode=1;});
+  const changed = structuredClone(defs); changed[0].supply.x++; assert.equal(M.validate(p, settings, changed, r).ok, false);
+  const c = r.circuits[0].segments[0], at = {x: (c.from.x + c.to.x) / 2, y: (c.from.y + c.to.y) / 2}; p.exclusions.areas.push(rect(at.x - .1, at.y - .1, .2, .2)); assert.equal(M.validate(p, settings, defs, r).ok, false);
+});
+test('non-rectangular room clipping and excluded-only overlaps', () => {
+  const p = G.createProject({room: {sections: [rect(0, 0, 2400, 2400), rect(2400, 0, 2400, 1200)]}}), defs = definitions(); defs[1].supply.y = defs[1].returnPoint.y = 1200;
+  verify(p, defs, M.plan(p, settings, defs));
+  const q = project(); q.exclusions.areas.push(rect(2300, 0, 200, 2400)); const d = definitions(); d[0].zone.width = 2500; d[1].zone.x = 2300; d[1].zone.width = 2500;
+  assert.equal(M.measure(q, d).overlapAreaMm2, 0);
+});
+test('per-circuit 80m warning uses full length without choosing more circuits', () => {
+  const p = G.createProject({room: {sections: [rect(0, 0, 9000, 3000)]}}), defs = [0, 1].map(i => ({id: `c${i}`, name: `Контур ${i + 1}`, zone: rect(i * 4500, 0, 4500, 3000), supply: {x: i * 4500, y: 0}, returnPoint: {x: (i + 1) * 4500, y: 3000}}));
+  const r = M.plan(p, settings, defs); verify(p, defs, r); assert.equal(r.circuits.length, 2); assert.equal(r.overLength, true); assert.ok(r.circuits.some(c => c.lengthMm > 80000));
+});
