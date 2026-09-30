@@ -31,10 +31,12 @@
       grid: {cellSizeMm, origin: point(options.grid?.origin || {x: 0, y: 0})},
       exclusions: {areas: (options.exclusions?.areas || []).map(rectangle)},
       collector: {supply: options.collector?.supply ? copy(options.collector.supply) : null,
-        returnPoint: options.collector?.returnPoint ? copy(options.collector.returnPoint) : null},
+        returnPoint: options.collector?.returnPoint ? copy(options.collector.returnPoint) : null,
+        ...(options.collector?.portPairs ? {portPairs: copy(options.collector.portPairs)} : {})},
       pipe: {diameterMm},
       // A dynamic list. No circuit allocation, bend radius or diameter-dependent rules in 3.0.
       circuits: copy(options.circuits || []),
+      ...(options.circuitDefinitions ? {circuitDefinitions: copy(options.circuitDefinitions)} : {}),
       migration: copy(options.migration || {warnings: []})
     };
   }

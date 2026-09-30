@@ -1,4 +1,4 @@
-importScripts('./engine-unified.js?v=320','./editor-core.js?v=320');
+importScripts('./engine-unified.js?v=340','./editor-core.js?v=340');
 self.onmessage=({data})=>{
  try{
   const {operation,input,plan,locks,range,guide,mode,pin}=data;

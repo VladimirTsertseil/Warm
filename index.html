@@ -5,17 +5,17 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
   <meta name="theme-color" content="#f8fafc" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-  <title>Тёплый пол — V3.2</title>
+  <title>Тёплый пол — V3.4</title>
   <link rel="manifest" href="manifest.webmanifest" />
-  <link rel="stylesheet" href="styles-v120.css?v=320" />
-  <link rel="stylesheet" href="styles-v24.css?v=320">
-  <link rel="stylesheet" href="notifications.css?v=320">
-  <link rel="stylesheet" href="mobile-editor.css?v=320">
+  <link rel="stylesheet" href="styles-v120.css?v=340" />
+  <link rel="stylesheet" href="styles-v24.css?v=340">
+  <link rel="stylesheet" href="notifications.css?v=340">
+  <link rel="stylesheet" href="mobile-editor.css?v=340">
 </head>
 <body>
   <div class="app-shell">
     <header class="home-topbar">
-      <div><div class="eyebrow">V3.2 · контур с подводами</div><h1>Тёплый пол</h1></div>
+      <div><div class="eyebrow">V3.4 · контур с подводами</div><h1>Тёплый пол</h1></div>
       <button id="newSchemeBtn" class="ghost-btn">Новая</button>
     </header>
 
@@ -302,7 +302,7 @@
             <label>Монтажная сетка, мм<select id="mountingGridInput"><option value="100">100 мм</option><option value="150" selected>150 мм</option><option value="200">200 мм</option></select></label>
             <label>Диаметр трубы, мм<select id="pipeDiameterInput"><option value="16">16 мм</option><option value="17">17 мм</option><option value="20">20 мм</option></select></label>
             <p id="mountingGridSummary" class="full sheet-help" aria-live="polite"></p>
-            <p class="full sheet-help">Новая улитка строится по монтажной сетке кнопкой «Улитка». Её радиус, шаг и отступ задаются отдельно. Параметры ниже относятся к прежнему расчёту и правке.</p>
+            <p class="full sheet-help">Контуры по монтажной сетке строятся кнопкой «Расчёт». Радиус, шаг и отступ задаются там же. Параметры ниже относятся к прежнему расчёту и правке.</p>
             <label>Шаг трубы, м<input id="pipeStepInput" type="number" value="0.15" min="0.05" max="0.50" step="0.01" inputmode="decimal"></label>
             <label>Отступ оси от стены, м<input id="wallOffsetInput" type="number" value="0.10" min="0" max="1" step="0.01" inputmode="decimal"></label>
             <label>Радиус изгиба<select id="bendRadiusModeInput"><option value="auto">Авто (5×Ø)</option><option value="manual">Вручную</option></select></label>
@@ -363,21 +363,27 @@
     <div class="feedback-dialog-head"><strong id="feedbackDialogTitle">Сообщение</strong><button id="feedbackDialogClose" class="feedback-button" type="button" aria-label="Закрыть сообщение" autofocus>×</button></div>
     <p id="feedbackDialogText"></p>
   </dialog>
-  <script src="engine-core-v120.js?v=320"></script>
-  <script src="app-v120.js?v=320"></script>
-  <script src="layout-patterns-v232.js?v=320"></script>
-  <script src="app-v232.js?v=320"></script>
-  <script src="shape-v24.js?v=320"></script>
-  <script src="app-v24.js?v=320"></script>
-  <script src="engine-unified.js?v=320"></script>
-  <script src="app-v260.js?v=320"></script>
-  <script src="notifications.js?v=320"></script>
-  <script src="editor-core.js?v=320"></script>
-  <script src="grid-core.js?v=320"></script>
-  <script src="app-v300.js?v=320"></script>
-  <script src="mobile-editor.js?v=320"></script>
-  <script src="spiral-core.js?v=320"></script>
-  <script src="circuit-core.js?v=320"></script>
-  <script src="app-v320.js?v=320"></script>
+  <script src="engine-core-v120.js?v=340"></script>
+  <script src="app-v120.js?v=340"></script>
+  <script src="layout-patterns-v232.js?v=340"></script>
+  <script src="app-v232.js?v=340"></script>
+  <script src="shape-v24.js?v=340"></script>
+  <script src="app-v24.js?v=340"></script>
+  <script src="engine-unified.js?v=340"></script>
+  <script src="app-v260.js?v=340"></script>
+  <script src="notifications.js?v=340"></script>
+  <script src="editor-core.js?v=340"></script>
+  <script src="grid-core.js?v=340"></script>
+  <script src="app-v300.js?v=340"></script>
+  <script src="mobile-editor.js?v=340"></script>
+  <script src="spiral-core.js?v=340"></script>
+  <script src="circuit-core.js?v=340"></script>
+  <script src="app-v320.js?v=340"></script>
+  <script src="multi-core.js?v=340"></script>
+  <script src="app-v330.js?v=340"></script>
+  <link rel="stylesheet" href="circuits-v33.css?v=340">
+  <script src="grid-editor-core.js?v=340"></script>
+  <script src="app-v340.js?v=340"></script>
+  <link rel="stylesheet" href="grid-editor-v34.css?v=340">
 </body>
 </html>

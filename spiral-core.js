@@ -249,7 +249,7 @@
     const ux = (b.center.x - a.center.x) / d, uy = (b.center.y - a.center.y) / d;
     return [-1, 1].some(sign => {const p = {x: a.center.x + ux * x - sign * uy * h, y: a.center.y + uy * x + sign * ux * h}; return onArc(a, p) && onArc(b, p);});
   }
-  function intersections(segments, binSize) {
+  function intersections(segments, binSize, groups = null) {
     const bins = new Map(), tested = new Set();
     for (let i = 0; i < segments.length; i++) {
       const a = segments[i], ps = [a.from, a.to];
@@ -259,7 +259,8 @@
       for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) {
         const id = key(x, y), others = bins.get(id) || [];
         for (const j of others) {
-          if (i - j <= 1 || tested.has(`${j}:${i}`)) continue;
+          // Different circuits have no shared joints, even at consecutive indices.
+          if ((groups ? groups[i] === groups[j] : i - j <= 1) || tested.has(`${j}:${i}`)) continue;
           tested.add(`${j}:${i}`); const b = segments[j];
           const hit = a.type === 'straight' ? (b.type === 'straight' ? Geometry.intersect(a.from, a.to, b.from, b.to) : lineArc(a, b)) : (b.type === 'straight' ? lineArc(b, a) : arcArc(a, b));
           if (hit) return true;

@@ -104,7 +104,7 @@
   $('undoBtn').addEventListener('click', () => {const s = historyV5.at(-1); if (!WarmEditor.active && s?.spiralSettingsV31) {state.spiralSettingsV31 = copy(s.spiralSettingsV31); syncSettings();}}, true);
   function calculateInWorker(p, settings) {
     return new Promise((resolve, reject) => {
-      worker = new Worker('./spiral-worker.js?v=320');
+      worker = new Worker('./spiral-worker.js?v=340');
       const w = worker;
       const finish = (error, result) => {clearTimeout(timer); w.terminate(); if (worker === w) {worker = null; cancelPending = null;} error ? reject(error) : resolve(result);};
       const timer = setTimeout(() => finish(new Error('TIMEOUT')), 30000);

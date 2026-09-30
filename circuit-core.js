@@ -8,24 +8,33 @@
   const H = S.geometry, EPS = 1e-6, dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
   const point = p => ({x: p.x, y: p.y}), same = (a, b) => a && b && dist(a, b) < EPS;
   const fail = (reason, extra = {}) => ({ok: false, status: 'ROUTE_IMPOSSIBLE', reason, circuits: [], ...extra});
-  function prepare(project, settings) {
+  function prepare(project, settings, context = {}) {
     const ctx = H.prepare(project, settings), method = settings?.method ?? 'auto';
     if (!['auto', 'spiral', 'double-snake'].includes(method)) throw new Error('INVALID_METHOD');
     ctx.settings = {...ctx.o, method};
     const {supply, returnPoint} = ctx.p.collector;
     if (![supply, returnPoint].every(p => p && Number.isFinite(p.x) && Number.isFinite(p.y))) throw new Error('COLLECTOR_REQUIRED');
     if (same(supply, returnPoint)) throw new Error('COINCIDENT_PORTS');
-    if ([supply, returnPoint].some(p => G.classifyPoint(ctx.p, p) !== 'available')) throw new Error('COLLECTOR_OUTSIDE');
+    const transitProject = context.transitProject ? G.createProject(context.transitProject) : ctx.p;
+    if ([supply, returnPoint].some(p => G.classifyPoint(transitProject, p) !== 'available')) throw new Error('COLLECTOR_OUTSIDE');
     if (!H.connected(ctx)) throw new Error('DISCONNECTED_OR_EMPTY_GRID');
     // Transit must reach ports on the wall. Only the heating area has the user's inset.
-    const space = Geo.freeSpace({sections: ctx.p.room.sections, obstacles: [...ctx.p.room.removedAreas, ...ctx.p.exclusions.areas], wallOffsetMm: 0, pipeDiameterMm: 0});
-    ctx.transit = {...ctx, space, guide: (a, b) => G.classifySegment(ctx.p, a, b) === 'available' && space.covers(a, b)};
+    const space = Geo.freeSpace({sections: transitProject.room.sections, obstacles: [...transitProject.room.removedAreas, ...transitProject.exclusions.areas], wallOffsetMm: 0, pipeDiameterMm: 0});
+    ctx.transit = {...ctx, p: transitProject, space, guide: (a, b) => G.classifySegment(transitProject, a, b) === 'available' && space.covers(a, b)};
+    ctx.occupied = context.occupied || [];
     return ctx;
   }
   function assemble(ctx, heatingRoute, supplyRoute, returnRoute, method, complete = true) {
     if (!['spiral', 'double-snake'].includes(method)) throw new Error('INVALID_METHOD');
     H.checkSegments(ctx, H.compile(ctx, heatingRoute));
-    if (!H.coversLattice(ctx, H.routeGridPoints(ctx, heatingRoute))) throw new Error('INCOMPLETE_COVERAGE');
+    const covered = ctx.edited ? [...ctx.lattice.values()].every(p => heatingRoute.slice(1).some((b, i) => {
+      const a = heatingRoute[i];
+      // Same one-step neighbourhood as automatic coverage, allowing any physical
+      // grid line after a manual move rather than only the planner's coarse phase.
+      return p.x >= Math.min(a.x, b.x) - ctx.step - EPS && p.x <= Math.max(a.x, b.x) + ctx.step + EPS &&
+        p.y >= Math.min(a.y, b.y) - ctx.step - EPS && p.y <= Math.max(a.y, b.y) + ctx.step + EPS;
+    })) : H.coversLattice(ctx, H.routeGridPoints(ctx, heatingRoute));
+    if (!covered) throw new Error('INCOMPLETE_COVERAGE');
     const entries = [['supply', supplyRoute], ['heating', heatingRoute], ['return', returnRoute]], route = [], parts = [], guides = [];
     for (const [part, path] of entries) {
       if (!Array.isArray(path)) throw new Error('INVALID_ROUTE');
@@ -44,6 +53,8 @@
     const segments = H.roundPath(route, ctx.o.radiusMm, guides, parts);
     // One validation of all three parts, including both hand-off bends and mutual crossings.
     H.checkSegments(ctx.transit, segments);
+    if (ctx.occupied.length && H.intersections([...ctx.occupied, ...segments], ctx.step,
+      [...ctx.occupied.map(() => 0), ...segments.map(() => 1)])) throw new Error('CIRCUIT_INTERSECTION');
     const heatingSegments = segments.filter(s => s.part === 'heating');
     H.checkSegments(ctx, heatingSegments);
     const section = (part, path) => {const ss = segments.filter(s => s.part === part); return {route: path.map(point), segments: ss, lengthMm: ss.reduce((n, s) => n + s.lengthMm, 0)};};
@@ -109,9 +120,9 @@
     }
     return null;
   }
-  function plan(project, settings) {
+  function plan(project, settings, context = {}) {
     let ctx;
-    try {ctx = prepare(project, settings);} catch (e) {return fail(e.message);}
+    try {ctx = prepare(project, settings, context);} catch (e) {return fail(e.message);}
     const methods = ctx.settings.method === 'auto' ? ['spiral', 'double-snake'] : [ctx.settings.method];
     const attempts = [], deadline = Date.now() + 18000;
     for (const method of methods) {
@@ -129,9 +140,9 @@
     }
     return fail('NO_COMPLETE_CIRCUIT', {attempts});
   }
-  function validate(project, settings, result) {
+  function validate(project, settings, result, context = {}) {
     try {
-      const ctx = prepare(project, settings);
+      const ctx = prepare(project, settings, context);
       if (!result?.ok || result.status !== 'ROUTE_OK' || result.planner !== 'grid-circuit-v32' || result.scope !== 'complete' || result.needsTransit !== false || result.circuits?.length !== 1) throw new Error('INVALID_PLAN');
       const c = result.circuits[0];
       if (ctx.settings.method !== 'auto' && ctx.settings.method !== c.method) throw new Error('INVALID_METHOD');
@@ -144,5 +155,16 @@
       return {ok: true, lengthMm: expected.lengthMm};
     } catch (e) {return {ok: false, reason: e.message};}
   }
-  return {plan, validate};
+  // Rebuild manually edited control points with the same exact geometry checks.
+  // The pattern name is not evidence that an edited route is still a spiral.
+  function rebuild(project, settings, paths, context = {}) {
+    try {
+      const ctx = prepare(project, {...settings, method: 'auto'}, context);
+      ctx.edited = true;
+      const circuit = assemble(ctx, paths.heating, paths.supply, paths.return, 'spiral');
+      circuit.method = 'manual'; circuit.status = 'MANUAL_OK';
+      return {ok: true, circuit};
+    } catch (e) {return {ok: false, reason: e.message};}
+  }
+  return {plan, validate, rebuild};
 });

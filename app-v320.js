@@ -71,7 +71,7 @@
   exportPng = async function() {
     if (!state.circuitPlanV32) return legacyExport();
     renderPlan();
-    if (!state.circuitPlanV32) {setStatus('Параметры изменились. Сначала пересчитайте улитку.', true); return;}
+    if (!state.circuitPlanV32) {setStatus('Параметры изменились. Сначала пересчитайте контур.', true); return;}
     const caption = summary(state.circuitPlanV32), description = details(state.circuitPlanV32), clone = planSvg.cloneNode(true);
     // External styles do not travel with an SVG blob: preserve the visible room/grid.
     const originals = [planSvg, ...planSvg.querySelectorAll('*')], copies = [clone, ...clone.querySelectorAll('*')];
@@ -123,7 +123,7 @@
   $('undoBtn').addEventListener('click', () => {const s = historyV5.at(-1); if (!WarmEditor.active && s?.circuitSettingsV32) {state.circuitSettingsV32 = copy(s.circuitSettingsV32); syncSettings();}}, true);
   function calculateInWorker(p, settings) {
     return new Promise((resolve, reject) => {
-      worker = new Worker('./circuit-worker.js?v=320');
+      worker = new Worker('./circuit-worker.js?v=340');
       const w = worker;
       const finish = (error, result) => {clearTimeout(timer); w.terminate(); if (worker === w) {worker = null; cancelPending = null;} error ? reject(error) : resolve(result);};
       const timer = setTimeout(() => finish(new Error('TIMEOUT')), 30000);
