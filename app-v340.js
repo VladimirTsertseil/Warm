@@ -187,7 +187,7 @@
   el('geCancelSearch').onclick = () => {cancelWorker(); renderPanel(); setStatus('Поиск остановлен. Правки сохранены.');};
   el('geReplan').onclick = async () => {
     if (worker || stale()) return; const request = ++generation, key = contextKey(), id = selectedId();
-    const work = new Promise((resolve, reject) => {const w = worker = new Worker('./grid-editor-worker.js?v=350'); const timer = setTimeout(() => finish(new Error('TIMEOUT')), 30000);
+    const work = new Promise((resolve, reject) => {const w = worker = new Worker('./grid-editor-worker.js?v=360'); const timer = setTimeout(() => finish(new Error('TIMEOUT')), 30000);
       const finish = (error, data) => {clearTimeout(timer); w.terminate(); if (worker === w) {worker = null; cancelPending = null;} error ? reject(error) : resolve(data);};
       cancelPending = () => finish(null, null); w.onmessage = e => finish(null, e.data); w.onerror = () => finish(new Error('CALCULATION_FAILED'));
       w.postMessage({project: project(), draft: copy(edit.draft), id, method: el('geMethod').value});

@@ -137,7 +137,7 @@
   };
   function inWorker(p, settings, defs) {
     return new Promise((resolve, reject) => {
-      const w = worker = new Worker('./multi-worker.js?v=350'); let timer;
+      const w = worker = new Worker('./multi-worker.js?v=360'); let timer;
       const finish = (error, result) => {clearTimeout(timer); w.terminate(); if (worker === w) {worker = null; cancelPending = null;} error ? reject(error) : resolve(result);};
       const arm = () => {clearTimeout(timer); timer = setTimeout(() => finish(new Error('TIMEOUT')), 30000);};
       cancelPending = () => finish(null, null); arm();

@@ -51,7 +51,7 @@
       const result=await new Promise((resolve,reject)=>{
         const done=(r,e)=>{clearTimeout(timer);worker?.terminate();worker=null;finishPending=null;e?reject(e):resolve(r);};
         finishPending=()=>resolve(null);
-        worker=new Worker('./auto-worker.js?v=350');
+        worker=new Worker('./auto-worker.js?v=360');
         timer=setTimeout(()=>done(null,new Error('SEARCH_LIMIT')),65000);
         worker.onmessage=({data})=>{if(data.progress)setStatus(`Проверяю ${data.progress.count} контур(а), подводы и длины…`,false,{kind:'progress'});else done(data.result);};
         worker.onerror=()=>done(null,new Error('CALCULATION_FAILED'));

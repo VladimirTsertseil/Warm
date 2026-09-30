@@ -32,6 +32,7 @@ function applyModelV24(raw,{history=false,reset=true,fit=false,render=true,statu
 }
 function defaultV24FromBounds(){const b=state.bounds?.width>10?state.bounds:{minX:0,minY:0,width:4000,height:3000};return Shape.defaultModel(b.width,b.height,b.minX||0,b.minY||0);}
 function adoptCurrentShapeV24(raw=null){
+  if(state.shapeParams?.v36)return false;
   if(state.shapeParams?.v24){applyModelV24(modelFromStateV24(),{reset:false,render:false});return true;}
   const originalType=raw?.shapeType||state.shapeType;
   if(originalType==='rect'&&(state.sections?.length||0)===1){applyModelV24(defaultV24FromBounds(),{reset:false,render:false});return true;}

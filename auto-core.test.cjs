@@ -10,7 +10,7 @@ const out=process.env.WARM_ARTIFACTS?path.resolve(process.env.WARM_ARTIFACTS):pa
   for(const viewport of [{width:1280,height:900},{width:390,height:844}]){
    const page=await browser.newPage({viewport,isMobile:viewport.width<500,hasTouch:viewport.width<500}),errors=[],missing=[];page.on('pageerror',e=>errors.push(e.message));page.on('response',r=>{if(r.status()===404&&!r.url().endsWith('/favicon.ico'))missing.push(r.url());});
    await page.goto('http://127.0.0.1:'+server.address().port+'/index.html');
-   await page.locator('#createFirstBtn').click();await page.waitForSelector('#shapeSheet.open');await page.locator('#shapeWidthInput').fill('3.00');await page.locator('#shapeHeightInput').fill('2.50');await page.locator('#doneShapeV24').click();
+   await page.locator('#createFirstBtn').click();await page.waitForSelector('#shapeSheet.open');await page.locator('#roomLegacyV36 > summary').click();await page.locator('#shapeWidthInput').fill('3.00');await page.locator('#shapeHeightInput').fill('2.50');await page.locator('#doneShapeV24').click();
    await page.evaluate(async()=>{await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));fitPlan(false);renderPlan();});
    await page.locator('#collectorToolBtn').click();
    const tap=await page.evaluate(()=>{const p=planSvg.createSVGPoint();p.x=1000;p.y=0;const q=p.matrixTransform(planSvg.getScreenCTM());return{x:q.x,y:q.y};});
@@ -38,9 +38,9 @@ const out=process.env.WARM_ARTIFACTS?path.resolve(process.env.WARM_ARTIFACTS):pa
    await page.locator('#geMore').evaluate(n=>n.open=true);await page.locator('#geReverse').click();assert(await page.evaluate(()=>WarmV340.report.ok));
    await page.locator('#geDone').click();assert(await page.evaluate(()=>state.routeComplete&&!WarmV340.active));
    const manual=await page.evaluate(()=>serializeState());assert(manual.gridEditV34);await page.evaluate(raw=>loadScheme(raw),manual);assert(await page.evaluate(()=>WarmV340.report.ok&&state.routeComplete));
-   await page.locator('#shapeToolBtn').click();await page.locator('#shapeWidthInput').fill('3.30');await page.locator('#doneShapeV24').click();assert.equal(await page.evaluate(()=>state.routeComplete),false);
+   await page.locator('#shapeToolBtn').click();await page.locator('#roomLegacyV36 > summary').click();await page.locator('#shapeWidthInput').fill('3.30');await page.locator('#doneShapeV24').click();assert.equal(await page.evaluate(()=>state.routeComplete),false);
    await page.locator('#generateBtn').click();await page.waitForFunction(()=>!WarmV350.busy&&!!WarmV350.plan,{},{timeout:60000});assert(await page.evaluate(()=>state.routeComplete&&!WarmV340.draft));
-   await page.locator('#shapeToolBtn').click();await page.locator('#shapeWidthInput').fill('6.00');await page.locator('#shapeHeightInput').fill('5.00');
+   await page.locator('#shapeToolBtn').click();await page.locator('#roomLegacyV36 > summary').click();await page.locator('#shapeWidthInput').fill('6.00');await page.locator('#shapeHeightInput').fill('5.00');
    await page.locator('#doneShapeV24').click();
    await page.evaluate(()=>{state.obstacles=[{id:'column',x:2700,y:2100,width:600,height:700}];state.supply={x:1000,y:0,side:'top'};state.returnPoint=null;state.mountingGridV3.cellSizeMm=150;recomputeGeometry();resetRoute();fitPlan(false);renderPlan();});
    await page.locator('#generateBtn').click();await page.waitForFunction(()=>!WarmV350.busy&&!!WarmV350.plan,{},{timeout:60000});

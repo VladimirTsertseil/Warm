@@ -123,7 +123,7 @@
   $('undoBtn').addEventListener('click', () => {const s = historyV5.at(-1); if (!WarmEditor.active && s?.circuitSettingsV32) {state.circuitSettingsV32 = copy(s.circuitSettingsV32); syncSettings();}}, true);
   function calculateInWorker(p, settings) {
     return new Promise((resolve, reject) => {
-      worker = new Worker('./circuit-worker.js?v=350');
+      worker = new Worker('./circuit-worker.js?v=360');
       const w = worker;
       const finish = (error, result) => {clearTimeout(timer); w.terminate(); if (worker === w) {worker = null; cancelPending = null;} error ? reject(error) : resolve(result);};
       const timer = setTimeout(() => finish(new Error('TIMEOUT')), 30000);

@@ -14,7 +14,7 @@ const root = path.resolve(process.env.WARM_TEST_ROOT || path.join(__dirname, '..
       const page = await browser.newPage({viewport: mobile ? {width: 390, height: 844} : {width: 1280, height: 900}, isMobile: mobile, hasTouch: mobile});
       const errors = []; page.on('pageerror', e => errors.push(e.message));
       await page.goto(`http://127.0.0.1:${server.address().port}/index.html`);
-      await page.locator('#createFirstBtn').click(); await page.waitForSelector('#shapeSheet.open');
+      await page.locator('#createFirstBtn').click(); await page.waitForSelector('#shapeSheet.open');await page.locator('#roomLegacyV36 > summary').click();
       await page.locator('#shapeWidthInput').fill('4.80'); await page.locator('#shapeHeightInput').fill('3.60'); await page.locator('#doneShapeV24').click();
       await page.evaluate(async () => {await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))); state.supply = {x: 600, y: 3600, side: 'bottom'}; state.returnPoint = {x: 650, y: 3600, side: 'bottom'}; state.circuitSettingsV32 = {radiusMm: 40, spacingCells: 2, wallOffsetMm: 100, method: 'auto'}; renderPlan(); await WarmV320.calculate();});
       assert.equal(await page.evaluate(() => WarmV330.plan?.ok), true, await page.locator('#status').innerText());
@@ -57,16 +57,16 @@ const root = path.resolve(process.env.WARM_TEST_ROOT || path.join(__dirname, '..
       await page.locator('#geDone').click(); assert.equal(await page.evaluate(() => WarmV340.active), false); assert.equal(await page.evaluate(() => state.routeComplete), true);
       await page.locator('#settingsBtn').click(); const downloading = page.waitForEvent('download'); await page.locator('#shareBtn').click(); const download = await downloading;
       const png = fs.readFileSync(await download.path()); assert.equal(png.readUInt32BE(16), 1600); if (process.env.WARM_SCREENSHOTS) await download.saveAs(path.join(process.env.WARM_SCREENSHOTS, `edit-export-${mobile ? 'mobile' : 'desktop'}.png`));
-      await page.locator('#saveBtn').click(); const saved = await page.evaluate(() => JSON.parse(localStorage.getItem(STORAGE_KEY))[0]); assert.equal(saved.versionLabel, '3.5.0'); assert.equal(saved.gridEditV34.committed, true);
+      await page.locator('#saveBtn').click(); const saved = await page.evaluate(() => JSON.parse(localStorage.getItem(STORAGE_KEY))[0]); assert.equal(saved.versionLabel, '3.6.0'); assert.equal(saved.gridEditV34.committed, true);
       await page.reload(); await page.getByRole('button', {name: 'Открыть', exact: true}).click(); assert.equal(await page.evaluate(() => state.routeComplete), true, await page.locator('#status').innerText());
       await page.evaluate(raw => {raw.gridEditV34.draft.circuits[0].paths.heating[1].x += 1; loadScheme(raw);}, saved); assert.equal(await page.evaluate(() => state.routeComplete), false);
       await page.evaluate(raw => {raw.gridEditV34.draft.settings.radiusMm = 50; loadScheme(raw);}, saved); assert.equal(await page.evaluate(() => state.routeComplete), false);
-      await page.evaluate(raw => loadScheme(raw), saved); await page.locator('#shapeToolBtn').click(); await page.locator('#shapeWidthInput').fill('4.65'); await page.locator('#doneShapeV24').click();
+      await page.evaluate(raw => loadScheme(raw), saved); await page.locator('#shapeToolBtn').click();await page.locator('#roomLegacyV36 > summary').click(); await page.locator('#shapeWidthInput').fill('4.65'); await page.locator('#doneShapeV24').click();
       assert.equal(await page.evaluate(() => state.routeComplete), false); assert.ok(await page.evaluate(() => WarmV340.report.issues.some(i => i.code === 'CONTEXT_CHANGED')));
       await page.locator('#manualToolBtn').click(); await page.locator('#geRecheck').click(); assert.equal(await page.evaluate(() => WarmV340.report.issues.some(i => i.code === 'CONTEXT_CHANGED')), false);
       // Worker completion cannot overwrite a new scheme.
       await page.evaluate(raw => loadScheme(raw), saved); await page.locator('#manualToolBtn').click(); await page.locator('#geMore').evaluate(n => n.open = true);
-      await page.evaluate(() => {document.getElementById('geReplan').click(); newScheme();}); await page.waitForSelector('#shapeSheet.open'); await page.locator('#doneShapeV24').click(); assert.equal(await page.evaluate(() => WarmV340.draft), null); assert.equal(await page.evaluate(() => WarmV340.busy), false);
+      await page.evaluate(() => {document.getElementById('geReplan').click(); newScheme();}); await page.waitForSelector('#shapeSheet.open');await page.locator('#roomLegacyV36 > summary').click(); await page.locator('#doneShapeV24').click(); assert.equal(await page.evaluate(() => WarmV340.draft), null); assert.equal(await page.evaluate(() => WarmV340.busy), false);
       await page.evaluate(raw => loadScheme(raw), original); assert.equal(await page.evaluate(() => WarmV340.draft), null); assert.equal(await page.evaluate(() => WarmV330.plan.ok), true);
       await page.evaluate(async () => {
         state.circuitDefinitionsV33 = [0, 1].map(i => ({id: `test-c${i}`, name: `Контур ${i + 1}`, portsFromMain: false, zone: {x: i * 2400, y: 0, width: 2400, height: 3600}, supply: {x: 600 + i * 2400, y: 3600}, returnPoint: {x: 650 + i * 2400, y: 3600}}));
