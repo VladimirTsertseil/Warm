@@ -1,0 +1,34 @@
+.room-choice-v36{display:grid;gap:10px;margin:10px 0 16px}.room-choice-v36 button{min-height:50px;text-align:left;padding:12px 16px}.room-choice-v36 small{display:block;font-weight:400;margin-top:4px}.room-legacy-v36>summary{padding:14px 0;cursor:pointer;font-weight:700}.room-legacy-v36 .legacy-shape-notice-v24{display:none!important}
+.room-draw-v36{position:fixed;inset:0;z-index:3000;display:flex;flex-direction:column;background:#f4f7fa;color:#172d3c;height:100dvh}.room-draw-v36[hidden]{display:none}.room-draw-head{display:flex;align-items:center;gap:12px;padding:calc(10px + env(safe-area-inset-top)) 16px 10px;border-bottom:1px solid #d5e0e8;background:white}.room-draw-head strong{display:block}.room-draw-head small{display:block;color:#546878;margin-top:3px}.room-draw-head>div{flex:1}.room-draw-head button{min-width:44px;min-height:44px;border:1px solid #d5e0e8;border-radius:12px;background:white;color:#172d3c}.room-draw-options{display:flex;align-items:center;gap:10px;padding:8px 16px;background:#fff;font-size:13px}.room-draw-options select{min-height:38px;padding:6px;border:1px solid #d5e0e8;border-radius:8px}.room-draw-options span{margin-left:auto;color:#546878}.room-draw-canvas{position:relative;flex:1;min-height:120px;overflow:hidden}.room-draw-canvas svg{display:block;width:100%;height:100%;touch-action:none;cursor:crosshair}.room-draw-canvas svg.panning{cursor:grab}.room-draw-hint{position:absolute;top:12px;left:12px;right:12px;pointer-events:none;text-align:center;font-size:13px;color:#405669}.room-draw-hint span{display:inline-block;padding:7px 12px;border:1px solid #d5e0e8;border-radius:12px;background:#ffffffed}.room-draw-zoom{position:absolute;right:12px;bottom:14px;display:flex;gap:6px}.room-draw-zoom button{width:44px;height:44px;border:1px solid #cedbe5;border-radius:12px;background:white;font-size:20px;color:#172d3c}.room-draw-zoom button.active{background:#d3eee8;border-color:#167568}.room-draw-footer{padding:10px 16px calc(12px + env(safe-area-inset-bottom));background:white;border-top:1px solid #d5e0e8}.room-draw-measure{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px}.room-draw-measure input{width:100px;min-height:42px;border:1px solid #cad8e1;border-radius:9px;padding:8px;font-size:16px}.room-draw-measure button{min-height:42px;padding:8px 12px;border:1px solid #cad8e1;border-radius:9px;background:#f4f7fa;color:#172d3c}.room-draw-message{min-height:34px;padding:8px 0;font-size:13px;color:#546878}.room-draw-message.error{color:#b42318}.room-draw-actions{display:flex;gap:8px}.room-draw-actions button{min-height:46px;border-radius:12px;padding:10px 16px;border:1px solid #d0dce5;background:white;color:#172d3c;font-weight:700}.room-draw-actions .primary-btn{margin-left:auto;background:#155b52;color:white;border:0}.room-draw-v36 button:disabled{opacity:.45;cursor:default}.room-draw-measure[hidden]{display:none}
+@media(min-width:800px){.room-draw-footer{padding-left:max(24px,calc((100vw - 900px)/2));padding-right:max(24px,calc((100vw - 900px)/2))}.room-draw-options,.room-draw-head{padding-left:24px;padding-right:24px}}
+
+.room-choice-v36{margin:12px 0 0}.room-choice-v36 .room-start-single-v36{width:100%;min-height:56px;text-align:center;font-size:1.05rem}.room-choice-v36 small{display:none}.room-legacy-v36{display:none!important}.sheet-head span[hidden]{display:none!important}
+
+/* 3.6 setup: only the parameters that affect automatic geometry. */
+.room-setup-v36{gap:18px;margin:6px 0 0}.room-setup-field-v36{display:grid;gap:8px}.room-setup-field-v36>span{font-size:13px;font-weight:700;color:#405669}.room-setup-chips-v36{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.room-setup-chips-v36 button{min-height:44px;padding:8px 10px;text-align:center;border:1px solid #d3dee7;border-radius:11px;background:#f7f9fb;color:#172d3c;font-weight:700}.room-setup-chips-v36 button.selected{background:#155b52;border-color:#155b52;color:#fff}.room-setup-limit-v36>div{display:flex;align-items:center;gap:8px}.room-setup-limit-v36 input{width:120px;min-height:44px;padding:8px 12px;border:1px solid #d3dee7;border-radius:11px;background:#fff;color:#172d3c;font:inherit;font-weight:700}.room-setup-limit-v36 b{font-size:14px;color:#405669}.room-setup-v36 .room-start-single-v36{margin-top:2px;min-height:56px;text-align:center;padding:12px 16px}.shape-sheet-v24 .room-setup-v36+ #legacyShapeNoticeV24{display:none!important}
+@media(min-width:700px){.room-setup-v36{grid-template-columns:1fr 1fr;column-gap:14px}.room-setup-limit-v36{grid-column:1/-1}.room-setup-v36 .room-start-single-v36{grid-column:1/-1}}
+
+/* UI patch 010: keep the full styled setup screen, but hide the unnecessary
+   exact-length/direction controls in the room-drawing screen only. */
+.room-draw-measure,
+.room-draw-message{
+  display:none!important;
+}
+.room-draw-footer{
+  display:flex;
+  justify-content:flex-end;
+  align-items:center;
+}
+.room-draw-actions{
+  width:100%;
+}
+@media(max-width:480px){
+  .room-draw-actions{flex-direction:column}
+  .room-draw-actions .primary-btn{margin-left:0}
+}
+
+/* UI patch 015: expose paired-lead option in the main setup form. */
+.room-setup-toggle-v36{display:flex;align-items:center;gap:11px;padding:11px 12px;border:1px solid #d3dee7;border-radius:11px;background:#f7f9fb;color:#172d3c;cursor:pointer}
+.room-setup-toggle-v36 input{width:20px;height:20px;flex:0 0 auto;accent-color:#155b52}
+.room-setup-toggle-v36 span{display:grid;gap:2px}.room-setup-toggle-v36 b{font-size:14px}.room-setup-toggle-v36 small{display:block!important;font-size:12px!important;font-weight:400!important;color:#64748b}
+@media(min-width:700px){.room-setup-toggle-v36{grid-column:1/-1}}

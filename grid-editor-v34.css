@@ -1,0 +1,26 @@
+#gridEditorPanelV34 { position: absolute; z-index: 15; left: 8px; right: 8px; bottom: 8px; max-height: 39%; display: flex; flex-direction: column; background: #fff; border: 1px solid #d4dce5; border-radius: 16px; box-shadow: 0 4px 24px #17253426; color: #172534; }
+#gridEditorPanelV34 .ge-head { display: flex; align-items: center; gap: 6px; padding: 7px 10px; border-bottom: 1px solid #e2e8f0; }
+#gridEditorPanelV34 .ge-head strong { margin-right: auto; font-size: 14px; }
+#gridEditorPanelV34 .ge-body { padding: 10px; overflow: auto; }
+#gridEditorPanelV34 button, #gridEditorPanelV34 select { min-height: 38px; padding: 7px 10px; border: 1px solid #cad5e2; border-radius: 9px; background: #f6f8fb; color: #172534; font: 600 13px system-ui; max-width: 100%; }
+#gridEditorPanelV34 button { cursor: pointer; }
+#gridEditorPanelV34 button:disabled { opacity: .42; cursor: default; }
+#gridEditorPanelV34 .ge-primary { background: #1e40af; color: white; border-color: #1e40af; }
+#gridEditorPanelV34 label { display: grid; gap: 4px; font-size: 12px; min-width: 0; }
+#gridEditorPanelV34 .ge-row { display: flex; flex-wrap: wrap; gap: 7px; margin: 7px 0; align-items: end; }
+#gridEditorPanelV34 .ge-row > * { flex: 1 1 130px; min-width: 0; }
+#gridEditorPanelV34 .ge-actions > * { flex-basis: 70px; }
+#gridEditorPanelV34 .ge-hint { margin: 7px 0; font-size: 12px; line-height: 1.4; color: #526277; }
+#geReport { white-space: pre-line; font-size: 12px; line-height: 1.45; margin: 7px 0; }
+#geReport.ge-invalid { color: #a41439; }
+#geMore summary { font-size: 13px; padding: 8px 0; cursor: pointer; }
+body.grid-editor-active-v34 .zoom-fab { bottom: 42%; }
+body.grid-editor-active-v34 #planSvg { touch-action: none; }
+body.grid-editor-active-v34 .diagram-scroll { bottom: 40%; padding-bottom: 20px; }
+#gePan[aria-pressed="true"] { background: #dbeafe; border-color: #2563eb; }
+#resumeGridDraftV34 { margin-top: 10px; }
+@media (max-width: 520px) {
+  #gridEditorPanelV34 .ge-head strong { max-width: 80px; font-size: 12px; }
+  #gridEditorPanelV34 .ge-head button { padding: 6px 8px; flex-shrink: 0; }
+  #gridEditorPanelV34 .ge-actions { display: grid; grid-template-columns: 1fr 1fr; }
+}
